@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -15,53 +15,17 @@ import { router } from 'expo-router';
 import { MapPin, Plus, SquarePen, Trash2, Star, Chrome as Home, Briefcase } from 'lucide-react-native';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { addressService, Address, CreateAddressData } from '@/services/addressesService';
 
-interface Address {
-  id: string;
-  label: string;
-  name: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  country: string;
-  isDefault: boolean;
-  type: 'home' | 'work' | 'other';
-}
 
 export default function ManageAddressesScreen() {
-  const [addresses, setAddresses] = useState<Address[]>([
-    {
-      id: '1',
-      label: 'Home',
-      name: 'John Doe',
-      phone: '+1 (555) 123-4567',
-      address: '123 Main Street, Apt 4B',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      country: 'United States',
-      isDefault: true,
-      type: 'home',
-    },
-    {
-      id: '2',
-      label: 'Work',
-      name: 'John Doe',
-      phone: '+1 (555) 123-4567',
-      address: '456 Business Ave, Suite 200',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10002',
-      country: 'United States',
-      isDefault: false,
-      type: 'work',
-    },
-  ]);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
-  const [formData, setFormData] = useState<Omit<Address, 'id' | 'isDefault'>>({
+  const [formData, setFormData] = useState<CreateAddressData>({
     label: '',
     name: '',
     phone: '',
@@ -72,10 +36,33 @@ export default function ManageAddressesScreen() {
     country: 'United States',
     type: 'home',
   });
-  const [errors, setErrors] = useState<Partial<Address>>({});
+
+  const [errors, setErrors] = useState<Partial<CreateAddressData>>({});
+
+  useEffect(() => {
+    loadAddresses();
+  }, []);
+
+  const loadAddresses = async () => {
+    try {
+      setIsLoading(true);
+      const response = await addressService.getAddresses();
+      
+      if (response.success && response.data?.addresses) {
+        setAddresses(response.data.addresses);
+      } else {
+        Alert.alert('Error', response.message || 'Failed to load addresses');
+      }
+    } catch (error) {
+      console.error('Error loading addresses:', error);
+      Alert.alert('Error', 'Failed to load addresses');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<Address> = {};
+    const newErrors: Partial<CreateAddressData> = {};
 
     if (!formData.label.trim()) newErrors.label = 'Label is required';
     if (!formData.name.trim()) newErrors.name = 'Name is required';
@@ -99,31 +86,42 @@ export default function ManageAddressesScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSaveAddress = () => {
+  const handleSaveAddress = async () => {
     if (!validateForm()) return;
 
-    if (editingAddress) {
-      // Update existing address
-      setAddresses(prev => 
-        prev.map(addr => 
-          addr.id === editingAddress.id 
-            ? { ...formData, id: editingAddress.id, isDefault: editingAddress.isDefault }
-            : addr
-        )
-      );
-      Alert.alert('Success', 'Address updated successfully!');
-    } else {
-      // Add new address
-      const newAddress: Address = {
-        ...formData,
-        id: Date.now().toString(),
-        isDefault: addresses.length === 0, // First address is default
-      };
-      setAddresses(prev => [...prev, newAddress]);
-      Alert.alert('Success', 'Address added successfully!');
-    }
+    setIsSubmitting(true);
 
-    resetForm();
+    try {
+    if (editingAddress) {
+        // Update existing address
+        const response = await addressService.updateAddress(editingAddress.id, formData);
+        
+        if (response.success) {
+          Alert.alert('Success', 'Address updated successfully!');
+          await loadAddresses(); // Reload addresses
+          resetForm();
+        } 
+    } else {
+        // Create new address
+        const addressData: CreateAddressData = {
+          ...formData,
+          isDefault: addresses.length === 0, // First address is default
+        };
+        
+        const response = await addressService.createAddress(addressData);
+        
+        if (response.success) {
+          Alert.alert('Success', 'Address added successfully!');
+          await loadAddresses(); // Reload addresses
+          resetForm();
+        } 
+      }
+    } catch (error) {
+      console.error('Error saving address:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const resetForm = () => {
@@ -146,6 +144,7 @@ export default function ManageAddressesScreen() {
   const handleEditAddress = (address: Address) => {
     setFormData({
       label: address.label,
+      type: address.type,
       name: address.name,
       phone: address.phone,
       address: address.address,
@@ -153,13 +152,12 @@ export default function ManageAddressesScreen() {
       state: address.state,
       zipCode: address.zipCode,
       country: address.country,
-      type: address.type,
     });
     setEditingAddress(address);
     setShowAddForm(true);
   };
 
-  const handleDeleteAddress = (addressId: string) => {
+  const handleDeleteAddress = async (addressId: string) => {
     const address = addresses.find(addr => addr.id === addressId);
     if (address?.isDefault && addresses.length > 1) {
       Alert.alert(
@@ -177,22 +175,40 @@ export default function ManageAddressesScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            setAddresses(prev => prev.filter(addr => addr.id !== addressId));
+          onPress: async () => {
+            try {
+              const response = await addressService.deleteAddress(addressId);
+              
+              if (response.success) {
+                Alert.alert('Success', 'Address deleted successfully');
+                await loadAddresses(); // Reload addresses
+              } else {
+                Alert.alert('Error', response.message || 'Failed to delete address');
+              }
+            } catch (error) {
+              console.error('Error deleting address:', error);
+              Alert.alert('Error', 'Network error. Please try again.');
+            }
           },
         },
       ]
     );
   };
 
-  const handleSetDefault = (addressId: string) => {
-    setAddresses(prev => 
-      prev.map(addr => ({
-        ...addr,
-        isDefault: addr.id === addressId,
-      }))
-    );
-    Alert.alert('Success', 'Default address updated!');
+  const handleSetDefault = async (addressId: string) => {
+    try {
+      const response = await addressService.setDefaultAddress(addressId);
+      
+      if (response.success) {
+        Alert.alert('Success', 'Default address updated!');
+        await loadAddresses(); // Reload addresses
+      } else {
+        Alert.alert('Error', response.message || 'Failed to set default address');
+      }
+    } catch (error) {
+      console.error('Error setting default address:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+    }
   };
 
   const getAddressTypeIcon = (type: string) => {
@@ -424,6 +440,7 @@ export default function ManageAddressesScreen() {
             <Button
               title={editingAddress ? 'Update Address' : 'Save Address'}
               onPress={handleSaveAddress}
+              loading={isSubmitting}
             />
           </View>
         </View>
@@ -440,6 +457,19 @@ export default function ManageAddressesScreen() {
           onBackPress={resetForm}
         />
         {renderAddressForm()}
+      </SafeAreaView>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header
+          title="Delivery Addresses"
+          showBackButton
+          onBackPress={() => router.back()}
+        />
+        <LoadingSpinner />
       </SafeAreaView>
     );
   }
@@ -481,7 +511,7 @@ export default function ManageAddressesScreen() {
               
               <TouchableOpacity
                 style={styles.addButton}
-                onPress={() => setShowAddForm(true)}
+                onPress={() => setShowAddForm(true)} 
               >
                 <Plus size={20} color="#2563EB" />
                 <Text style={styles.addButtonText}>Add New Address</Text>

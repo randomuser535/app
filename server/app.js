@@ -7,6 +7,7 @@ require('dotenv').config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const addressRoutes = require('./routes/addresses');
 
 // Import database connection
 const database = require('./config/database');
@@ -83,6 +84,7 @@ app.use((req, res, next) => {
  * Routes
  */
 app.use('/api/auth', authRoutes);
+app.use('/api/addresses', addressRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

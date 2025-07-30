@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -16,6 +16,8 @@ import { router } from 'expo-router';
 import { useApp, getCartTotal } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { addressService, Address } from '@/services/addressesService';
 
 interface FormData {
   // Personal Info
@@ -40,6 +42,10 @@ interface FormData {
 export default function CheckoutScreen() {
   const { state, dispatch } = useApp();
   const [currentStep, setCurrentStep] = useState(0);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     firstName: state.user?.name?.split(' ')[0] || '',
@@ -67,6 +73,52 @@ export default function CheckoutScreen() {
   const tax = cartTotal * 0.08;
   const shipping = cartTotal > 100 ? 0 : 9.99;
   const finalTotal = cartTotal + tax + shipping;
+
+  useEffect(() => {
+    if (currentStep === 1) {
+      loadAddresses();
+    }
+  }, [currentStep]);
+
+  const loadAddresses = async () => {
+    try {
+      setIsLoadingAddresses(true);
+      const response = await addressService.getAddresses();
+      
+      if (response.success && response.data?.addresses) {
+        setAddresses(response.data.addresses);
+        // Auto-select default address
+        const defaultAddress = response.data.addresses.find(addr => addr.isDefault);
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          // Pre-fill form with default address
+          setFormData(prev => ({
+            ...prev,
+            address: defaultAddress.address,
+            city: defaultAddress.city,
+            state: defaultAddress.state,
+            zipCode: defaultAddress.zipCode,
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error loading addresses:', error);
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  };
+
+  const handleSelectAddress = (address: Address) => {
+    setSelectedAddressId(address.id);
+    setFormData(prev => ({
+      ...prev,
+      address: address.address,
+      city: address.city,
+      state: address.state,
+      zipCode: address.zipCode,
+    }));
+    setShowAddressForm(false);
+  };
 
   const updateFormData = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -255,6 +307,58 @@ export default function CheckoutScreen() {
     <View style={styles.stepContainer}>
       <Text style={styles.stepTitle}>Shipping Address</Text>
 
+      {/* Saved Addresses */}
+      {isLoadingAddresses ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading addresses...</Text>
+        </View>
+      ) : addresses.length > 0 && !showAddressForm ? (
+        <View style={styles.savedAddressesContainer}>
+          <Text style={styles.savedAddressesTitle}>Choose from saved addresses:</Text>
+          {addresses.map((address) => (
+            <TouchableOpacity
+              key={address.id}
+              style={[
+                styles.savedAddressCard,
+                selectedAddressId === address.id && styles.selectedAddressCard
+              ]}
+              onPress={() => handleSelectAddress(address)}
+            >
+              <View style={styles.savedAddressHeader}>
+                <Text style={styles.savedAddressLabel}>{address.label}</Text>
+                {address.isDefault && (
+                  <View style={styles.defaultBadge}>
+                    <Text style={styles.defaultBadgeText}>Default</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.savedAddressText}>
+                {address.name}
+              </Text>
+              <Text style={styles.savedAddressText}>
+                {address.address}, {address.city}, {address.state} {address.zipCode}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          
+          <TouchableOpacity
+            style={styles.useNewAddressButton}
+            onPress={() => setShowAddressForm(true)}
+          >
+            <Text style={styles.useNewAddressText}>Use a different address</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
+          {addresses.length > 0 && (
+            <TouchableOpacity
+              style={styles.backToSavedButton}
+              onPress={() => setShowAddressForm(false)}
+            >
+              <Text style={styles.backToSavedText}>← Back to saved addresses</Text>
+            </TouchableOpacity>
+          )}
+
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Street Address</Text>
         <TextInput
@@ -301,6 +405,8 @@ export default function CheckoutScreen() {
           {errors.zipCode && <Text style={styles.errorText}>{errors.zipCode}</Text>}
         </View>
       </View>
+        </>
+      )}
     </View>
   );
 
@@ -608,6 +714,84 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 16,
     fontFamily: 'Inter-Bold',
+    color: '#2563EB',
+  },
+  loadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  savedAddressesContainer: {
+    marginBottom: 20,
+  },
+  savedAddressesTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  savedAddressCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+  },
+  selectedAddressCard: {
+    borderColor: '#2563EB',
+    backgroundColor: '#EFF6FF',
+  },
+  savedAddressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  savedAddressLabel: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+  },
+  defaultBadge: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  defaultBadgeText: {
+    fontSize: 10,
+    fontFamily: 'Inter-Bold',
+    color: '#FFFFFF',
+  },
+  savedAddressText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  useNewAddressButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  useNewAddressText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
+  },
+  backToSavedButton: {
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  backToSavedText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
     color: '#2563EB',
   },
   bottomActions: {

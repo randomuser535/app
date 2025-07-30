@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -15,7 +15,9 @@ import { Camera, CreditCard as MapPin, Phone, Mail, Lock, Save, X, SquarePen } f
 import { useApp } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
 import { authService } from '@/services/authService';
+import { addressService, Address } from '@/services/addressesService';
 
 interface UserProfile {
   name: string;
@@ -24,15 +26,6 @@ interface UserProfile {
   avatar?: string;
 }
 
-interface Address {
-  id: string;
-  label: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  isDefault: boolean;
-}
 
 export default function UserProfileScreen() {
   const { state, dispatch } = useApp();
@@ -44,27 +37,28 @@ export default function UserProfileScreen() {
     phone: state.user?.phone || '',
     avatar: state.user?.avatar,
   });
-  const [addresses, setAddresses] = useState<Address[]>([
-    {
-      id: '1',
-      label: 'Home',
-      address: '123 Main Street',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      isDefault: true,
-    },
-    {
-      id: '2',
-      label: 'Work',
-      address: '456 Business Ave',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10002',
-      isDefault: false,
-    },
-  ]);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true);
   const [errors, setErrors] = useState<Partial<UserProfile>>({});
+
+  useEffect(() => {
+    loadAddresses();
+  }, []);
+
+  const loadAddresses = async () => {
+    try {
+      setIsLoadingAddresses(true);
+      const response = await addressService.getAddresses();
+      
+      if (response.success && response.data?.addresses) {
+        setAddresses(response.data.addresses);
+      }
+    } catch (error) {
+      console.error('Error loading addresses:', error);
+    } finally {
+      setIsLoadingAddresses(false);
+    }
+  };
 
   const validateProfile = (): boolean => {
     const newErrors: Partial<UserProfile> = {};
@@ -155,21 +149,9 @@ export default function UserProfileScreen() {
   };
 
   const handleAddAddress = () => {
-    Alert.alert('Add Address', 'Add new address functionality would be implemented here.');
+    router.push('/manage-addresses');
   };
 
-  const handleEditAddress = (addressId: string) => {
-    Alert.alert('Edit Address', `Edit address ${addressId} functionality would be implemented here.`);
-  };
-
-  const setDefaultAddress = (addressId: string) => {
-    setAddresses(prev => 
-      prev.map(addr => ({
-        ...addr,
-        isDefault: addr.id === addressId,
-      }))
-    );
-  };
 
   const handleChangeAvatar = () => {
     Alert.alert(
@@ -304,7 +286,19 @@ export default function UserProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {addresses.map((address) => (
+          {isLoadingAddresses ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading addresses...</Text>
+            </View>
+          ) : addresses.length === 0 ? (
+            <View style={styles.noAddressesContainer}>
+              <Text style={styles.noAddressesText}>No delivery addresses saved</Text>
+              <TouchableOpacity onPress={() => router.push('/manage-addresses')}>
+                <Text style={styles.addFirstAddressText}>Add your first address</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            addresses.slice(0, 2).map((address) => (
             <TouchableOpacity
               key={address.id}
               style={[styles.addressCard, address.isDefault && styles.defaultAddress]}
@@ -327,16 +321,20 @@ export default function UserProfileScreen() {
               <Text style={styles.addressText}>
                 {address.address}, {address.city}, {address.state} {address.zipCode}
               </Text>
-              {!address.isDefault && (
-                <TouchableOpacity
-                  style={styles.setDefaultButton}
-                  onPress={() => router.push('/manage-addresses')}
-                >
-                  <Text style={styles.setDefaultText}>Set as Default</Text>
-                </TouchableOpacity>
-              )}
             </TouchableOpacity>
-          ))}
+            ))
+          )}
+          
+          {addresses.length > 2 && (
+            <TouchableOpacity 
+              style={styles.viewAllButton}
+              onPress={() => router.push('/manage-addresses')}
+            >
+              <Text style={styles.viewAllText}>
+                View all {addresses.length} addresses
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Security */}
@@ -560,6 +558,42 @@ const styles = StyleSheet.create({
   },
   setDefaultText: {
     fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
+  },
+  loadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  noAddressesContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  noAddressesText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  addFirstAddressText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
+  },
+  viewAllButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    marginTop: 8,
+  },
+  viewAllText: {
+    fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#2563EB',
   },
