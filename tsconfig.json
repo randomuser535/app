@@ -1,7 +1,13 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "jsx": "react-jsx",
     "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     }
@@ -10,7 +16,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts"
+    "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }

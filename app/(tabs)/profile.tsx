@@ -10,9 +10,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { User, Settings, ShoppingBag, Heart, CircleHelp as HelpCircle, LogOut, ChevronRight, CircleUser as UserCircle, Bell, FileText, Shield } from 'lucide-react-native';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
+import { authService } from '@/services/authService';
 
 const menuItems = [
   {
@@ -95,8 +95,10 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.removeItem('user');
+              await authService.logout();
               dispatch({ type: 'SET_USER', payload: null });
+              dispatch({ type: 'CLEAR_CART' });
+              dispatch({ type: 'CLEAR_WISHLIST' });
             } catch (error) {
               console.error('Error logging out:', error);
             }
@@ -192,6 +194,23 @@ export default function ProfileScreen() {
           <View style={styles.userDetails}>
             <Text style={styles.userName}>{state.user.name}</Text>
             <Text style={styles.userEmail}>{state.user.email}</Text>
+            {state.user.phone && (
+              <Text style={styles.userPhone}>{state.user.phone}</Text>
+            )}
+            {state.user.isEmailVerified !== undefined && (
+              <View style={styles.verificationStatus}>
+                <View style={[
+                  styles.verificationDot,
+                  { backgroundColor: state.user.isEmailVerified ? '#10B981' : '#F59E0B' }
+                ]} />
+                <Text style={[
+                  styles.verificationText,
+                  { color: state.user.isEmailVerified ? '#10B981' : '#F59E0B' }
+                ]}>
+                  {state.user.isEmailVerified ? 'Email Verified' : 'Email Not Verified'}
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -322,6 +341,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#64748B',
+    marginBottom: 2,
+  },
+  userPhone: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  verificationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  verificationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  verificationText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
 
   // Menu styles

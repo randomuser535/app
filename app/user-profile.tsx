@@ -15,6 +15,7 @@ import { Camera, CreditCard as MapPin, Phone, Mail, Lock, Save, X, SquarePen } f
 import { useApp } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import { authService } from '@/services/authService';
 
 interface UserProfile {
   name: string;
@@ -36,10 +37,11 @@ interface Address {
 export default function UserProfileScreen() {
   const { state, dispatch } = useApp();
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [profile, setProfile] = useState<UserProfile>({
     name: state.user?.name || '',
     email: state.user?.email || '',
-    phone: '+1 (555) 123-4567',
+    phone: state.user?.phone || '',
     avatar: state.user?.avatar,
   });
   const [addresses, setAddresses] = useState<Address[]>([
@@ -69,6 +71,10 @@ export default function UserProfileScreen() {
 
     if (!profile.name.trim()) {
       newErrors.name = 'Name is required';
+    } else if (profile.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters';
+    } else if (!/^[a-zA-Z\s]+$/.test(profile.name.trim())) {
+      newErrors.name = 'Name can only contain letters and spaces';
     }
 
     if (!profile.email.trim()) {
@@ -77,36 +83,67 @@ export default function UserProfileScreen() {
       newErrors.email = 'Invalid email format';
     }
 
-    if (!profile.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
+    if (profile.phone && profile.phone.trim() && !/^\+?[\d\s\-\(\)]+$/.test(profile.phone)) {
+      newErrors.phone = 'Please enter a valid phone number';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validateProfile()) return;
 
-    // Update user in context
-    dispatch({
-      type: 'SET_USER',
-      payload: {
-        ...state.user!,
-        name: profile.name,
-        email: profile.email,
-      },
-    });
+    setIsSaving(true);
 
+    try {
+      const updateData: { name?: string; phone?: string } = {};
+      
+      // Only include fields that have changed
+      if (profile.name.trim() !== state.user?.name) {
+        updateData.name = profile.name.trim();
+      }
+      
+      if (profile.phone.trim() !== (state.user?.phone || '')) {
+        updateData.phone = profile.phone.trim();
+      }
+
+      // Only make API call if there are changes
+      if (Object.keys(updateData).length > 0) {
+        const response = await authService.updateProfile(updateData);
+        
+        if (response.success && response.data) {
+          // Update user in context
+          dispatch({
+            type: 'SET_USER',
+            payload: response.data.user,
+          });
+          
+          Alert.alert('Success', 'Profile updated successfully!');
+        } else {
+          Alert.alert('Error', response.message || 'Failed to update profile');
+          setIsSaving(false);
+          return;
+        }
+      } else {
+        Alert.alert('No Changes', 'No changes were made to your profile.');
+      }
+    } catch (error) {
+      console.error('Profile update error:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+      setIsSaving(false);
+      return;
+    }
+
+    setIsSaving(false);
     setIsEditing(false);
-    Alert.alert('Success', 'Profile updated successfully!');
   };
 
   const handleCancel = () => {
     setProfile({
       name: state.user?.name || '',
       email: state.user?.email || '',
-      phone: '+1 (555) 123-4567',
+      phone: state.user?.phone || '',
       avatar: state.user?.avatar,
     });
     setErrors({});
@@ -186,6 +223,20 @@ export default function UserProfileScreen() {
           </View>
           <Text style={styles.userName}>{profile.name}</Text>
           <Text style={styles.userEmail}>{profile.email}</Text>
+          {state.user?.isEmailVerified !== undefined && (
+            <View style={styles.verificationStatus}>
+              <View style={[
+                styles.verificationDot,
+                { backgroundColor: state.user.isEmailVerified ? '#10B981' : '#F59E0B' }
+              ]} />
+              <Text style={[
+                styles.verificationText,
+                { color: state.user.isEmailVerified ? '#10B981' : '#F59E0B' }
+              ]}>
+                {state.user.isEmailVerified ? 'Email Verified' : 'Email Not Verified'}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Personal Information */}
@@ -219,13 +270,16 @@ export default function UserProfileScreen() {
               placeholder="Enter your email"
               keyboardType="email-address"
               autoCapitalize="none"
-              editable={isEditing}
+              editable={false}
             />
+            {!isEditing && (
+              <Text style={styles.fieldNote}>Email cannot be changed for security reasons</Text>
+            )}
             {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone Number</Text>
+            <Text style={styles.label}>Phone Number (Optional)</Text>
             <TextInput
               style={[styles.input, errors.phone && styles.inputError]}
               value={profile.phone}
@@ -308,6 +362,7 @@ export default function UserProfileScreen() {
             <Button
               title="Save Changes"
               onPress={handleSave}
+              loading={isSaving}
               fullWidth
               size="large"
             />
@@ -374,6 +429,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#64748B',
+    marginBottom: 8,
+  },
+  verificationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verificationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  verificationText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
   },
   section: {
     backgroundColor: '#FFFFFF',
@@ -431,6 +501,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#EF4444',
     marginTop: 4,
+  },
+  fieldNote: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   addressCard: {
     borderWidth: 1,

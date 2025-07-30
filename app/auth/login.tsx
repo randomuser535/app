@@ -12,11 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import { authService, AuthResponse } from '@/services/authService';
 
 export default function LoginScreen() {
   const { dispatch } = useApp();
@@ -37,8 +37,8 @@ export default function LoginScreen() {
 
     if (!password.trim()) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    } else if (password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
     }
 
     setErrors(newErrors);
@@ -50,27 +50,41 @@ export default function LoginScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(async () => {
-      try {
-        // Mock user data - in real app, this would come from your backend
-        const userData = {
-          id: '1',
-          name: 'John Doe',
-          email: email,
-        };
+    try {
+      const response: AuthResponse = await authService.login({
+        email: email.toLowerCase().trim(),
+        password,
+      });
 
-        await AsyncStorage.setItem('user', JSON.stringify(userData));
-        dispatch({ type: 'SET_USER', payload: userData });
+      setIsLoading(false);
+
+      if (response.success && response.data) {
+        // Update app context with user data
+        dispatch({ type: 'SET_USER', payload: response.data.user });
         
-        setIsLoading(false);
+        // Navigate to main app
         router.dismissAll();
         router.push('/(tabs)');
-      } catch (error) {
-        setIsLoading(false);
-        Alert.alert('Error', 'Login failed. Please try again.');
+        
+        Alert.alert('Welcome!', `Welcome back, ${response.data.user.name}!`);
+      } else {
+        // Handle API errors
+        if (response.errors && response.errors.length > 0) {
+          const fieldErrors: { email?: string; password?: string } = {};
+          response.errors.forEach(error => {
+            if (error.field === 'email') fieldErrors.email = error.message;
+            if (error.field === 'password') fieldErrors.password = error.message;
+          });
+          setErrors(fieldErrors);
+        } else {
+          Alert.alert('Login Failed', response.message || 'Please check your credentials and try again.');
+        }
       }
-    }, 1500);
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Login error:', error);
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+    }
   };
 
   const handleSignupPress = () => {
@@ -121,6 +135,7 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="email"
               />
               {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
             </View>
@@ -139,6 +154,7 @@ export default function LoginScreen() {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="password"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}

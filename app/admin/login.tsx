@@ -46,8 +46,8 @@ export default function AdminLoginScreen() {
 
     // Simulate API call - In production, this would authenticate with your backend
     setTimeout(async () => {
-      // Demo credentials - replace with actual authentication
-      if (credentials.username === 'admin' && credentials.password === 'admin123') {
+      // Credentials 
+      if (credentials.username === 'admin@onetech.com' && credentials.password === 'One@Admin') {
         try {
           const adminSession = {
             id: 'admin-1',

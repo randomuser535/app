@@ -7,13 +7,15 @@ import {
   StyleSheet,
   Alert,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Eye, EyeOff, Lock, Check, X } from 'lucide-react-native';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import { authService } from '@/services/authService';
 
 interface PasswordStrength {
   score: number;
@@ -63,7 +65,7 @@ export default function ChangePasswordScreen() {
       feedback.push('One number');
     }
 
-    if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    if (/[@$!%*?&]/.test(password)) {
       score += 1;
     } else {
       feedback.push('One special character');
@@ -108,27 +110,43 @@ export default function ChangePasswordScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call for password verification and change
-    setTimeout(() => {
-      // In a real app, you would verify the current password with your backend
-      if (currentPassword !== 'currentpassword123') {
-        setErrors({ currentPassword: 'Current password is incorrect' });
-        setIsLoading(false);
-        return;
-      }
+    try {
+      const response = await authService.changePassword({
+        currentPassword,
+        newPassword,
+      });
 
       setIsLoading(false);
-      Alert.alert(
-        'Password Changed',
-        'Your password has been successfully updated.',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    }, 2000);
+
+      if (response.success) {
+        Alert.alert(
+          'Password Changed',
+          'Your password has been successfully updated.',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        // Handle API errors
+        if (response.errors && response.errors.length > 0) {
+          const fieldErrors: typeof errors = {};
+          response.errors.forEach(error => {
+            if (error.field === 'currentPassword') fieldErrors.currentPassword = error.message;
+            if (error.field === 'newPassword') fieldErrors.newPassword = error.message;
+          });
+          setErrors(fieldErrors);
+        } else {
+          Alert.alert('Error', response.message || 'Failed to change password');
+        }
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Change password error:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+    }
   };
 
   const clearError = (field: keyof typeof errors) => {
@@ -152,6 +170,7 @@ export default function ChangePasswordScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+    <ScrollView>
       <Header
         title="Change Password"
         showBackButton
@@ -258,7 +277,7 @@ export default function ChangePasswordScreen() {
                 {renderPasswordRequirement(/[A-Z]/.test(newPassword), 'One uppercase letter')}
                 {renderPasswordRequirement(/[a-z]/.test(newPassword), 'One lowercase letter')}
                 {renderPasswordRequirement(/\d/.test(newPassword), 'One number')}
-                {renderPasswordRequirement(/[!@#$%^&*(),.?":{}|<>]/.test(newPassword), 'One special character')}
+                {renderPasswordRequirement(/[@$!%*?&]/.test(newPassword), 'One special character (@$!%*?&)')}
               </View>
             )}
           </View>
@@ -317,6 +336,7 @@ export default function ChangePasswordScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+    </ScrollView>
     </SafeAreaView>
   );
 }

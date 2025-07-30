@@ -12,17 +12,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import { authService, AuthResponse } from '@/services/authService';
 
 interface SignupData {
   name: string;
   email: string;
   password: string;
   confirmPassword: string;
+  phone?: string;
 }
 
 export default function SignupScreen() {
@@ -32,6 +33,7 @@ export default function SignupScreen() {
     email: '',
     password: '',
     confirmPassword: '',
+    phone: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -53,6 +55,8 @@ export default function SignupScreen() {
       newErrors.name = 'Full name is required';
     } else if (formData.name.trim().length < 2) {
       newErrors.name = 'Name must be at least 2 characters';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.name.trim())) {
+      newErrors.name = 'Name can only contain letters and spaces';
     }
 
     if (!formData.email.trim()) {
@@ -65,8 +69,8 @@ export default function SignupScreen() {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 8) {
       newErrors.password = 'Password must be at least 8 characters';
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-      newErrors.password = 'Password must contain uppercase, lowercase, and number';
+    } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/.test(formData.password)) {
+      newErrors.password = 'Password must contain uppercase, lowercase, number, and special character';
     }
 
     if (!formData.confirmPassword.trim()) {
@@ -75,6 +79,9 @@ export default function SignupScreen() {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
+    if (formData.phone && formData.phone.trim() && !/^\+?[\d\s\-\(\)]+$/.test(formData.phone)) {
+      newErrors.phone = 'Please enter a valid phone number';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -84,24 +91,25 @@ export default function SignupScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(async () => {
-      try {
-        // Mock user creation - in real app, this would call backend
-        const userData = {
-          id: Date.now().toString(),
-          name: formData.name.trim(),
-          email: formData.email.toLowerCase().trim(),
-        };
+    try {
+      const signupData = {
+        name: formData.name.trim(),
+        email: formData.email.toLowerCase().trim(),
+        password: formData.password,
+        ...(formData.phone && formData.phone.trim() && { phone: formData.phone.trim() }),
+      };
 
-        await AsyncStorage.setItem('user', JSON.stringify(userData));
-        dispatch({ type: 'SET_USER', payload: userData });
-        
-        setIsLoading(false);
+      const response: AuthResponse = await authService.signup(signupData);
+
+      setIsLoading(false);
+
+      if (response.success && response.data) {
+        // Update app context with user data
+        dispatch({ type: 'SET_USER', payload: response.data.user });
         
         Alert.alert(
           'Account Created!',
-          'Welcome to One Tech! Your account has been created successfully.',
+          `Welcome to One Tech, ${response.data.user.name}! Your account has been created successfully.`,
           [
             {
               text: 'Start Shopping',
@@ -112,11 +120,26 @@ export default function SignupScreen() {
             },
           ]
         );
-      } catch (error) {
-        setIsLoading(false);
-        Alert.alert('Error', 'Failed to create account. Please try again.');
+      } else {
+        // Handle API errors
+        if (response.errors && response.errors.length > 0) {
+          const fieldErrors: Partial<SignupData> = {};
+          response.errors.forEach(error => {
+            if (error.field === 'name') fieldErrors.name = error.message;
+            if (error.field === 'email') fieldErrors.email = error.message;
+            if (error.field === 'password') fieldErrors.password = error.message;
+            if (error.field === 'phone') fieldErrors.phone = error.message;
+          });
+          setErrors(fieldErrors);
+        } else {
+          Alert.alert('Signup Failed', response.message || 'Please check your information and try again.');
+        }
       }
-    }, 2000);
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Signup error:', error);
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+    }
   };
 
   const handleLoginPress = () => {
@@ -161,6 +184,7 @@ export default function SignupScreen() {
                 placeholder="Enter your full name"
                 autoCapitalize="words"
                 autoCorrect={false}
+                autoComplete="name"
               />
               {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
             </View>
@@ -175,10 +199,23 @@ export default function SignupScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="email"
               />
               {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
             </View>
 
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Phone Number (Optional)</Text>
+              <TextInput
+                style={[styles.input, errors.phone && styles.inputError]}
+                value={formData.phone}
+                onChangeText={(text) => updateFormData('phone', text)}
+                placeholder="Enter your phone number"
+                keyboardType="phone-pad"
+                autoComplete="tel"
+              />
+              {errors.phone && <Text style={styles.errorText}>{errors.phone}</Text>}
+            </View>
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordContainer}>
@@ -190,6 +227,7 @@ export default function SignupScreen() {
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="new-password"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -204,7 +242,7 @@ export default function SignupScreen() {
               </View>
               {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
               <Text style={styles.passwordHint}>
-                Must be 8+ characters with uppercase, lowercase, and number
+                Must be 8+ characters with uppercase, lowercase, number, and special character
               </Text>
             </View>
 
@@ -219,6 +257,7 @@ export default function SignupScreen() {
                   secureTextEntry={!showConfirmPassword}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="new-password"
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}

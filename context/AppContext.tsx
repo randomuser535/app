@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { authService } from '@/services/authService';
 
 export interface Product {
   id: string;
@@ -23,6 +24,11 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
+  role?: string;
+  isEmailVerified?: boolean;
+  lastLogin?: string | null;
+  createdAt?: string;
   avatar?: string;
 }
 
@@ -225,9 +231,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const loadUser = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        dispatch({ type: 'SET_USER', payload: JSON.parse(userData) });
+      // First try to get user from AsyncStorage (for offline access)
+      const cachedUserData = await AsyncStorage.getItem('user');
+      if (cachedUserData) {
+        dispatch({ type: 'SET_USER', payload: JSON.parse(cachedUserData) });
+      }
+
+      // Then try to get fresh user data from API if authenticated
+      if (authService.isAuthenticated()) {
+        const currentUser = await authService.getCurrentUser();
+        if (currentUser) {
+          dispatch({ type: 'SET_USER', payload: currentUser });
+        } else {
+          // Token might be expired, clear user data
+          await AsyncStorage.removeItem('user');
+          dispatch({ type: 'SET_USER', payload: null });
+        }
       }
     } catch (error) {
       console.error('Error loading user:', error);
