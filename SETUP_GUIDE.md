@@ -106,7 +106,7 @@ This guide will walk you through setting up a complete user authentication syste
    # Database Configuration
    MONGODB_URI=mongodb://localhost:27017/onetech_ecommerce
    # For MongoDB Atlas, use your connection string:
-   # MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/onetech_ecommerce
+   # MONGODB_URI=mongodb+srv://username:password
 
    # JWT Configuration
    JWT_SECRET=your-super-secret-jwt-key-at-least-32-characters-long
