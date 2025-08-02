@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   TouchableOpacity
 } from 'react-native';
-import { AlertCircle, RefreshCw } from 'lucide-react-native';
+import { CircleAlert as AlertCircle, RefreshCw } from 'lucide-react-native';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { ProductFilters } from '@/services/productService';
