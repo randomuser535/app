@@ -64,100 +64,93 @@ export default function HomeScreen() {
     router.push('/notifications');
   };
 
+  // Header component for the FlatList
+  const renderHeader = () => (
+    <>
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>One Tech</Text>
+          <Text style={styles.title}>Find your perfect product</Text>
+        </View>
+        <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
+          <Bell size={24} color="#64748B" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Search size={20} color="#64748B" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search products..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#64748B"
+          />
+        </View>
+      </View>
+
+      {/* Categories */}
+      <View style={styles.categoriesContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categories}
+        >
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.categoryChip,
+                selectedCategory === category && styles.categoryChipActive,
+              ]}
+              onPress={() => setSelectedCategory(category)}
+            >
+              <Text
+                style={[
+                  styles.categoryText,
+                  selectedCategory === category && styles.categoryTextActive,
+                ]}
+              >
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* View Toggle */}
+      <View style={styles.viewToggle}>
+        <Text style={styles.resultsText}>
+          {filteredProducts.length} products found
+        </Text>
+        <View style={styles.viewButtons}>
+          <TouchableOpacity
+            style={[styles.viewButton, viewMode === 'grid' && styles.activeViewButton]}
+            onPress={() => setViewMode('grid')}
+          >
+            <Grid3X3 size={20} color={viewMode === 'grid' ? '#2563EB' : '#64748B'} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewButton, viewMode === 'list' && styles.activeViewButton]}
+            onPress={() => setViewMode('list')}
+          >
+            <List size={20} color={viewMode === 'list' ? '#2563EB' : '#64748B'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+
   if (state.isLoading || state.isLoadingProducts) {
     return <LoadingSpinner />;
   }
 
   return (
-<SafeAreaView style={styles.container}>
-  <ScrollView
-    showsVerticalScrollIndicator={false}
-    refreshControl={
-      <RefreshControl
-        refreshing={isRefreshing}
-        onRefresh={handleRefresh}
-        colors={['#2563EB']}
-        tintColor="#2563EB"
-      />
-    }
-    stickyHeaderIndices={[2]} // Make categories sticky
-  >
-    {/* Header */}
-    <View style={styles.header}>
-      <View>
-        <Text style={styles.greeting}>One Tech</Text>
-        <Text style={styles.title}>Find your perfect product</Text>
-      </View>
-      <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
-        <Bell size={24} color="#64748B" />
-      </TouchableOpacity>
-    </View>
-
-    {/* Search Bar */}
-    <View style={styles.searchContainer}>
-      <View style={styles.searchBar}>
-        <Search size={20} color="#64748B" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search products..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#64748B"
-        />
-      </View>
-    </View>
-
-    {/* Categories */}
-    <View style={styles.categoriesContainer}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categories}
-      >
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={[
-              styles.categoryChip,
-              selectedCategory === category && styles.categoryChipActive,
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text
-              style={[
-                styles.categoryText,
-                selectedCategory === category && styles.categoryTextActive,
-              ]}
-            >
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-
-    {/* View Toggle */}
-    <View style={styles.viewToggle}>
-      <Text style={styles.resultsText}>
-        {filteredProducts.length} products found
-      </Text>
-      <View style={styles.viewButtons}>
-        <TouchableOpacity
-          style={[styles.viewButton, viewMode === 'grid' && styles.activeViewButton]}
-          onPress={() => setViewMode('grid')}
-        >
-          <Grid3X3 size={20} color={viewMode === 'grid' ? '#2563EB' : '#64748B'} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.viewButton, viewMode === 'list' && styles.activeViewButton]}
-          onPress={() => setViewMode('list')}
-        >
-          <List size={20} color={viewMode === 'list' ? '#2563EB' : '#64748B'} />
-        </TouchableOpacity>
-      </View>
-    </View>
-    
-    {/* Products List */}
+    <SafeAreaView style={styles.container}>
+      {/* Option 1: Use ProductList with ListHeaderComponent if it supports it */}
       <ProductList
         filters={getFilters()}
         layout={viewMode}
@@ -165,9 +158,17 @@ export default function HomeScreen() {
         showLoadMore={true}
         onProductPress={(productId) => router.push(`/product/${productId}`)}
         contentContainerStyle={styles.productsContainer}
+        ListHeaderComponent={renderHeader}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#2563EB']}
+            tintColor="#2563EB"
+          />
+        }
       />
-  </ScrollView>
-</SafeAreaView>
+    </SafeAreaView>
   );
 }
 
