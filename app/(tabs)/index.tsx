@@ -7,7 +7,8 @@ import {
   TouchableOpacity, 
   TextInput,
   Alert,
-  RefreshControl
+  RefreshControl,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, Grid3x3 as Grid3X3, List, Search } from 'lucide-react-native';
@@ -15,15 +16,25 @@ import { router } from 'expo-router';
 import { useApp, useProducts } from '@/context/AppContext';
 import ProductList from '@/components/ProductList';
 import LoadingSpinner from '@/components/LoadingSpinner';
-import { ProductFilters } from '@/services/productService';
+import { ProductFilters } from '@/services/productService'
 
 export default function HomeScreen() {
   const { state } = useApp();
-  const { categories: apiCategories, refreshProducts } = useProducts();
+  const { products, categories: apiCategories, refreshProducts } = useProducts();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Filter products based on selected category and search query
+  const filteredProducts = products.filter((product) => {
+    const matchesCategory =
+      selectedCategory === 'All' || product.category === selectedCategory;
+    const matchesSearch =
+      !searchQuery.trim() ||
+      product.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   // Combine 'All' with API categories
   const categories = ['All', ...apiCategories];
@@ -58,108 +69,105 @@ export default function HomeScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={['#2563EB']}
-            tintColor="#2563EB"
-          />
-        }
-        stickyHeaderIndices={[2]} // Make categories sticky
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>One Tech</Text>
-            <Text style={styles.title}>Find your perfect product</Text>
-          </View>
-          <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
-            <Bell size={24} color="#64748B" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Search size={20} color="#64748B" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search products..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#64748B"
-            />
-          </View>
-        </View>
-
-        {/* Categories */}
-        <View style={styles.categoriesContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categories}
-          >
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category && styles.categoryChipActive,
-                ]}
-                onPress={() => setSelectedCategory(category)}
-              >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    selectedCategory === category && styles.categoryTextActive,
-                  ]}
-                >
-                  {category}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-      {/* View Toggle */}
-      <View style={styles.viewToggle}>
-        <Text style={styles.resultsText}>
-          {filteredProducts.length} products found
-        </Text>
-        <View style={styles.viewButtons}>
-          <TouchableOpacity
-            style={[styles.viewButton, viewMode === 'grid' && styles.activeViewButton]}
-            onPress={() => setViewMode('grid')}
-          >
-            <Grid3X3 size={20} color={viewMode === 'grid' ? '#2563EB' : '#64748B'} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.viewButton, viewMode === 'list' && styles.activeViewButton]}
-            onPress={() => setViewMode('list')}
-          >
-            <List size={20} color={viewMode === 'list' ? '#2563EB' : '#64748B'} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      </ScrollView>
-
-{/* Products Grid/List */}
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProduct}
-        numColumns={viewMode === 'grid' ? 2 : 1}
-        key={viewMode} // Force re-render when view mode changes
-        contentContainerStyle={styles.productsContainer}
-        showsVerticalScrollIndicator={false}
-        columnWrapperStyle={viewMode === 'grid' ? styles.row : undefined}
+<SafeAreaView style={styles.container}>
+  <ScrollView
+    showsVerticalScrollIndicator={false}
+    refreshControl={
+      <RefreshControl
+        refreshing={isRefreshing}
+        onRefresh={handleRefresh}
+        colors={['#2563EB']}
+        tintColor="#2563EB"
       />
-    </SafeAreaView>
+    }
+    stickyHeaderIndices={[2]} // Make categories sticky
+  >
+    {/* Header */}
+    <View style={styles.header}>
+      <View>
+        <Text style={styles.greeting}>One Tech</Text>
+        <Text style={styles.title}>Find your perfect product</Text>
+      </View>
+      <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
+        <Bell size={24} color="#64748B" />
+      </TouchableOpacity>
+    </View>
+
+    {/* Search Bar */}
+    <View style={styles.searchContainer}>
+      <View style={styles.searchBar}>
+        <Search size={20} color="#64748B" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search products..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholderTextColor="#64748B"
+        />
+      </View>
+    </View>
+
+    {/* Categories */}
+    <View style={styles.categoriesContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.categories}
+      >
+        {categories.map((category) => (
+          <TouchableOpacity
+            key={category}
+            style={[
+              styles.categoryChip,
+              selectedCategory === category && styles.categoryChipActive,
+            ]}
+            onPress={() => setSelectedCategory(category)}
+          >
+            <Text
+              style={[
+                styles.categoryText,
+                selectedCategory === category && styles.categoryTextActive,
+              ]}
+            >
+              {category}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+
+    {/* View Toggle */}
+    <View style={styles.viewToggle}>
+      <Text style={styles.resultsText}>
+        {filteredProducts.length} products found
+      </Text>
+      <View style={styles.viewButtons}>
+        <TouchableOpacity
+          style={[styles.viewButton, viewMode === 'grid' && styles.activeViewButton]}
+          onPress={() => setViewMode('grid')}
+        >
+          <Grid3X3 size={20} color={viewMode === 'grid' ? '#2563EB' : '#64748B'} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewButton, viewMode === 'list' && styles.activeViewButton]}
+          onPress={() => setViewMode('list')}
+        >
+          <List size={20} color={viewMode === 'list' ? '#2563EB' : '#64748B'} />
+        </TouchableOpacity>
+      </View>
+    </View>
+    
+    {/* Products List */}
+      <ProductList
+        filters={getFilters()}
+        layout={viewMode}
+        numColumns={viewMode === 'grid' ? 2 : 1}
+        showLoadMore={true}
+        onProductPress={(productId) => router.push(`/product/${productId}`)}
+        contentContainerStyle={styles.productsContainer}
+      />
+  </ScrollView>
+</SafeAreaView>
   );
 }
 
