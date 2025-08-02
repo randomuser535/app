@@ -15,6 +15,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Camera, X, Save } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
+import { productService, CreateProductData } from '@/services/productService';
+import { useProduct } from '@/hooks/useProduct';
 
 interface ProductForm {
   name: string;
@@ -30,7 +32,8 @@ interface ProductForm {
 
 export default function EditProductScreen() {
   const { id } = useLocalSearchParams();
-  const { state, dispatch } = useApp();
+  const { dispatch } = useApp();
+  const { product: apiProduct, isLoading: isLoadingProduct } = useProduct(id as string);
   const [formData, setFormData] = useState<ProductForm>({
     name: '',
     description: '',
@@ -46,23 +49,22 @@ export default function EditProductScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const categories = ['Smartphones', 'Laptops', 'Wearables', 'Headphones', 'Accessories'];
-  const product = state.products.find(p => p.id === id);
 
   useEffect(() => {
-    if (product) {
+    if (apiProduct) {
       setFormData({
-        name: product.name,
-        description: product.description,
-        price: product.price.toString(),
-        sku: product.id, // Using ID as SKU for demo
-        category: product.category,
-        brand: product.brand,
-        inventoryCount: '50', // Mock inventory count
-        inStock: product.inStock,
-        images: product.images || [product.image],
+        name: apiProduct.name,
+        description: apiProduct.description,
+        price: apiProduct.price.toString(),
+        sku: apiProduct.sku || apiProduct.id,
+        category: apiProduct.category,
+        brand: apiProduct.brand,
+        inventoryCount: apiProduct.inventoryCount?.toString() || '50',
+        inStock: apiProduct.inStock,
+        images: apiProduct.images || [apiProduct.image],
       });
     }
-  }, [product]);
+  }, [apiProduct]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<ProductForm> = {};
@@ -92,34 +94,45 @@ export default function EditProductScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const updatedProduct = {
-        ...product!,
+    try {
+      const updateData: Partial<CreateProductData> = {
         name: formData.name,
         description: formData.description,
         price: Number(formData.price),
         category: formData.category,
         brand: formData.brand,
+        sku: formData.sku,
+        inventoryCount: Number(formData.inventoryCount),
         inStock: formData.inStock && Number(formData.inventoryCount) > 0,
         images: formData.images,
-        image: formData.images[0] || product!.image,
       };
 
-      dispatch({ type: 'UPDATE_PRODUCT', payload: updatedProduct });
+      const response = await productService.updateProduct(id as string, updateData);
+      
       setIsLoading(false);
       
-      Alert.alert(
-        'Success',
-        'Product updated successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    }, 1500);
+      if (response.success && response.data?.product) {
+        // Update local state for immediate UI update
+        dispatch({ type: 'UPDATE_PRODUCT', payload: response.data.product });
+        
+        Alert.alert(
+          'Success',
+          'Product updated successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error', response.message || 'Failed to update product');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Update product error:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+    }
   };
 
   const handleAddImage = () => {
@@ -150,7 +163,27 @@ export default function EditProductScreen() {
     }
   };
 
-  if (!product) {
+  if (isLoadingProduct) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => router.back()}
+          >
+            <ArrowLeft size={24} color="#1E293B" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Edit Product</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading product...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!apiProduct) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
@@ -538,5 +571,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#1E293B',
     marginBottom: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
 });

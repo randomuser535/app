@@ -1,20 +1,10 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '@/services/authService';
+import { productService, Product as ApiProduct } from '@/services/productService';
 
-export interface Product {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  category: string;
-  description: string;
-  rating: number;
-  reviews: number;
-  inStock: boolean;
-  brand: string;
-  images: string[];
-}
+// Re-export Product interface from productService for consistency
+export type Product = ApiProduct;
 
 export interface CartItem extends Product {
   quantity: number;
@@ -45,21 +35,29 @@ interface AppState {
   cart: CartItem[];
   wishlist: Product[];
   products: Product[];
+  categories: string[];
+  brands: string[];
   orders: Order[];
   isLoading: boolean;
+  isLoadingProducts: boolean;
   error: string | null;
+  productsError: string | null;
 }
 
 type AppAction =
   | { type: 'SET_USER'; payload: User | null }
   | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_PRODUCTS_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_PRODUCTS_ERROR'; payload: string | null }
   | { type: 'ADD_TO_CART'; payload: Product }
   | { type: 'REMOVE_FROM_CART'; payload: string }
   | { type: 'UPDATE_CART_QUANTITY'; payload: { id: string; quantity: number } }
   | { type: 'CLEAR_CART' }
   | { type: 'SET_CART'; payload: CartItem[] }
   | { type: 'SET_PRODUCTS'; payload: Product[] }
+  | { type: 'SET_CATEGORIES'; payload: string[] }
+  | { type: 'SET_BRANDS'; payload: string[] }
   | { type: 'ADD_ORDER'; payload: Order }
   | { type: 'ADD_TO_WISHLIST'; payload: Product }
   | { type: 'REMOVE_FROM_WISHLIST'; payload: string }
@@ -67,16 +65,21 @@ type AppAction =
   | { type: 'CLEAR_WISHLIST' }
   | { type: 'ADD_PRODUCT'; payload: Product }
   | { type: 'REMOVE_PRODUCT'; payload: string }
-  | { type: 'UPDATE_PRODUCT'; payload: Product };
+  | { type: 'UPDATE_PRODUCT'; payload: Product }
+  | { type: 'REFRESH_PRODUCTS' };
 
 const initialState: AppState = {
   user: null,
   cart: [],
   wishlist: [],
   products: [],
+  categories: [],
+  brands: [],
   orders: [],
   isLoading: false,
+  isLoadingProducts: false,
   error: null,
+  productsError: null,
 };
 
 function appReducer(state: AppState, action: AppAction): AppState {
@@ -85,10 +88,18 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, user: action.payload };
     case 'SET_LOADING':
       return { ...state, isLoading: action.payload };
+    case 'SET_PRODUCTS_LOADING':
+      return { ...state, isLoadingProducts: action.payload };
     case 'SET_ERROR':
       return { ...state, error: action.payload };
+    case 'SET_PRODUCTS_ERROR':
+      return { ...state, productsError: action.payload };
     case 'SET_PRODUCTS':
-      return { ...state, products: action.payload };
+      return { ...state, products: action.payload, productsError: null };
+    case 'SET_CATEGORIES':
+      return { ...state, categories: action.payload };
+    case 'SET_BRANDS':
+      return { ...state, brands: action.payload };
     case 'SET_CART':
       return { ...state, cart: action.payload };
     case 'ADD_TO_CART':
@@ -160,6 +171,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
           product.id === action.payload.id ? action.payload : product
         ),
       };
+    case 'REFRESH_PRODUCTS':
+      // Trigger a refresh of products from API
+      return { ...state, isLoadingProducts: true, productsError: null };
     default:
       return state;
   }
@@ -177,7 +191,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadCart();
     loadWishlist();
-    loadProducts();
+    loadProductsFromAPI();
+    loadCategories();
+    loadBrands();
     loadUser();
   }, []);
 
@@ -253,134 +269,109 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loadProducts = () => {
-    // Mock products
-    const mockProducts: Product[] = [
-      {
-        id: '1',
-        name: 'iPhone 16 Pro Max',
-        price: 1199,
-        image: 'https://www.apple.com/newsroom/images/2024/09/apple-debuts-iphone-16-pro-and-iphone-16-pro-max/tile/Apple-iPhone-16-Pro-hero-240909-lp.jpg.news_app_ed.jpg',
-        category: 'Smartphones',
-        description: 'The iPhone 16 Pro Max redefines flagship performance with the all-new A18 Pro chip, a stunning 6.9" Super Retina XDR display, and a titanium body built for durability. Capture life in cinematic detail with the upgraded triple-lens camera system featuring 5x telephoto zoom and next-gen AI photography. Experience iOS like never before — faster, smarter, and more immersive.',
-        rating: 4.5,
-        reviews: 324,
-        inStock: true,
-        brand: 'Apple',
-        images: [
-          'https://www.apple.com/newsroom/images/2024/09/apple-debuts-iphone-16-pro-and-iphone-16-pro-max/tile/Apple-iPhone-16-Pro-hero-240909-lp.jpg.news_app_ed.jpg',
-        ]
-      },
-      {
-        id: '2',
-        name: 'Samsung Galaxy S25',
-        price: 799,
-        image: 'https://diamu.com.bd/wp-content/uploads/2025/01/Samsung-Galaxy-S25.jpg',
-        category: 'Smartphones',
-        description: 'Meet the Galaxy S25 — Samsung\'s sleekest and smartest phone yet. Boasting a 6.8" AMOLED 2X display, Snapdragon Gen 4 processor, and an advanced quad-camera system with 200MP main sensor, it\'s designed for creators and power users alike. Plus, its all-day battery and eco-friendly design make it a win for performance and sustainability.',
-        rating: 4.2,
-        reviews: 550,
-        inStock: true,
-        brand: 'Samsung',
-        images: [
-          'https://diamu.com.bd/wp-content/uploads/2025/01/Samsung-Galaxy-S25.jpg'
-        ]
-      },
-      {
-        id: '3',
-        name: 'Fitbit Inspire 3',
-        price: 99,
-        image: 'https://thegadgetflow.com/wp-content/uploads/2025/03/Fitbit-Inspire-3-health-and-fitness-smartwatch-04-1024x576.jpeg',
-        category: 'Wearables',
-        description: 'Track your activity, sleep, heart rate, and stress with the slim and stylish Fitbit Inspire 3. With up to 10 days of battery life, guided breathing sessions, and customizable clock faces, this fitness tracker makes wellness easy — and wearable.',
-        rating: 4.7,
-        reviews: 892,
-        inStock: true,
-        brand: 'Fitbit',
-        images: [
-          'https://thegadgetflow.com/wp-content/uploads/2025/03/Fitbit-Inspire-3-health-and-fitness-smartwatch-04-1024x576.jpeg'
-        ]
-      },
-      {
-        id: '4',
-        name: 'Galaxy Watch7 ',
-        price: 299,
-        image: 'https://dazzle.sgp1.cdn.digitaloceanspaces.com/30756/Galaxy-Watch-7-green.png',
-        category: 'Wearables',
-        description: 'Stay connected and in control with the Galaxy Watch7. Featuring advanced health monitoring, fitness tracking, and seamless integration with your Galaxy devices, it\'s your perfect everyday companion. With a vibrant AMOLED display and customizable watch faces, it\'s where fashion meets function.',
-        rating: 4.3,
-        reviews: 267,
-        inStock: true,
-        brand: 'Samsung',
-        images: [
-          'https://dazzle.sgp1.cdn.digitaloceanspaces.com/30756/Galaxy-Watch-7-green.png'
-        ]
-      },
-      {
-        id: '5',
-        name: 'ASUS ROG Strix G16',
-        price: 1999,
-        image: 'https://computermania.com.bd/wp-content/uploads/2025/01/ASUS-ROG-5-2.jpg',
-        category: 'Laptops',
-        description: 'Power up your gameplay with the ASUS ROG Strix G16 — a 16" gaming beast equipped with the latest Intel Core i9 processor and NVIDIA GeForce RTX 4070 GPU. Enjoy ultra-smooth visuals on a 165Hz FHD+ display, advanced cooling, and RGB lighting that makes your setup shine. This is where serious gaming begins.',
-        rating: 4.8,
-        reviews: 445,
-        inStock: true,
-        brand: 'ASUS',
-        images: [
-          'https://computermania.com.bd/wp-content/uploads/2025/01/ASUS-ROG-5-2.jpg'
-        ]
-      },
-      {
-        id: '6',
-        name: 'MacBook Pro',
-        price: 2499,
-        image: 'https://www.custommacbd.com/cdn/shop/files/mbp16-space-black-Custom-Mac-BD.jpg?v=1700117634',
-        category: 'Laptops',
-        description: 'The MacBook Pro with M3 chip delivers unrivaled performance and battery life for professionals and creatives. Its Liquid Retina XDR display brings images to life, while ProMotion technology ensures fluid graphics. Whether editing 8K videos or building complex apps, this laptop doesn\'t break a sweat — and neither will you.',
-        rating: 4.6,
-        reviews: 178,
-        inStock: true,
-        brand: 'Apple',
-        images: [
-          'https://www.custommacbd.com/cdn/shop/files/mbp16-space-black-Custom-Mac-BD.jpg?v=1700117634'
-        ]
-      },
-      {
-        id: '7',
-        name: 'Sony WH-1000XM6',
-        price: 449,
-        image: 'https://cdn.mos.cms.futurecdn.net/a8rpypBTkEiL3qUF6uyG4P.jpg',
-        category: 'Headphones',
-        description: 'Immerse yourself in pure audio bliss with the Sony WH-1000XM6. Featuring industry-leading noise cancellation, adaptive sound control, and next-gen comfort, these headphones are engineered for uninterrupted listening. Enjoy studio-quality sound and up to 40 hours of battery on a single charge.',
-        rating: 4.4,
-        reviews: 328,
-        inStock: true,
-        brand: 'Sony',
-        images: [
-          'https://cdn.mos.cms.futurecdn.net/a8rpypBTkEiL3qUF6uyG4P.jpg'
-        ]
-      },
-      {
-        id: '8',
-        name: 'Apple AirPods Max',
-        price: 549,
-        image: 'https://hips.hearstapps.com/hmg-prod/images/apple-airpods-max-review-64959f6226b6d.jpg?crop=0.5xw:1xh;center,top&resize=640:*',
-        category: 'Headphones',
-        description: 'Apple AirPods Max combine high-fidelity audio with premium design. With spatial audio, dynamic head tracking, and Active Noise Cancellation, every note feels immersive. The breathable mesh headband and memory foam ear cushions make long listening sessions effortlessly comfortable.',
-        rating: 4.6,
-        reviews: 118,
-        inStock: true,
-        brand: 'Apple',
-        images: [
-          'https://hips.hearstapps.com/hmg-prod/images/apple-airpods-max-review-64959f6226b6d.jpg?crop=0.5xw:1xh;center,top&resize=640:*'
-        ]
-      }
+  const loadProductsFromAPI = async () => {
+    try {
+      dispatch({ type: 'SET_PRODUCTS_LOADING', payload: true });
+      dispatch({ type: 'SET_PRODUCTS_ERROR', payload: null });
 
-    ];
-    
-    dispatch({ type: 'SET_PRODUCTS', payload: mockProducts });
+      const response = await productService.getProducts({ 
+        sortBy: 'createdAt', 
+        sortOrder: 'desc',
+        limit: 50 // Load more products initially
+      });
+
+      if (response.success && response.data?.products) {
+        dispatch({ type: 'SET_PRODUCTS', payload: response.data.products });
+      } else {
+        // Fallback to cached products if API fails
+        const cachedProducts = await productService.getCachedProducts();
+        if (cachedProducts.length > 0) {
+          dispatch({ type: 'SET_PRODUCTS', payload: cachedProducts });
+          dispatch({ type: 'SET_PRODUCTS_ERROR', payload: 'Showing cached products. Pull to refresh for latest data.' });
+        } else {
+          // Use mock data as last resort
+          dispatch({ type: 'SET_PRODUCTS', payload: getMockProducts() });
+          dispatch({ type: 'SET_PRODUCTS_ERROR', payload: 'Using demo products. Connect to internet for real data.' });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+      
+      // Try cached products first
+      const cachedProducts = await productService.getCachedProducts();
+      if (cachedProducts.length > 0) {
+        dispatch({ type: 'SET_PRODUCTS', payload: cachedProducts });
+        dispatch({ type: 'SET_PRODUCTS_ERROR', payload: 'Network error. Showing cached products.' });
+      } else {
+        // Fallback to mock data
+        dispatch({ type: 'SET_PRODUCTS', payload: getMockProducts() });
+        dispatch({ type: 'SET_PRODUCTS_ERROR', payload: 'Network error. Using demo products.' });
+      }
+    } finally {
+      dispatch({ type: 'SET_PRODUCTS_LOADING', payload: false });
+    }
   };
+
+  const loadCategories = async () => {
+    try {
+      const response = await productService.getCategories();
+      if (response.success && response.data) {
+        dispatch({ type: 'SET_CATEGORIES', payload: response.data });
+      } else {
+        // Fallback to default categories
+        dispatch({ type: 'SET_CATEGORIES', payload: ['Smartphones', 'Laptops', 'Wearables', 'Headphones', 'Accessories'] });
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      dispatch({ type: 'SET_CATEGORIES', payload: ['Smartphones', 'Laptops', 'Wearables', 'Headphones', 'Accessories'] });
+    }
+  };
+
+  const loadBrands = async () => {
+    try {
+      const response = await productService.getBrands();
+      if (response.success && response.data) {
+        dispatch({ type: 'SET_BRANDS', payload: response.data });
+      } else {
+        // Fallback to default brands
+        dispatch({ type: 'SET_BRANDS', payload: ['Apple', 'Samsung', 'Sony', 'ASUS', 'Fitbit'] });
+      }
+    } catch (error) {
+      console.error('Error loading brands:', error);
+      dispatch({ type: 'SET_BRANDS', payload: ['Apple', 'Samsung', 'Sony', 'ASUS', 'Fitbit'] });
+    }
+  };
+
+  // Mock products as fallback
+  const getMockProducts = (): Product[] => [
+    {
+      id: '1',
+      name: 'iPhone 16 Pro Max',
+      price: 1199,
+      image: 'https://www.apple.com/newsroom/images/2024/09/apple-debuts-iphone-16-pro-and-iphone-16-pro-max/tile/Apple-iPhone-16-Pro-hero-240909-lp.jpg.news_app_ed.jpg',
+      category: 'Smartphones',
+      description: 'The iPhone 16 Pro Max redefines flagship performance with the all-new A18 Pro chip, a stunning 6.9" Super Retina XDR display, and a titanium body built for durability.',
+      rating: 4.5,
+      reviews: 324,
+      inStock: true,
+      brand: 'Apple',
+      images: ['https://www.apple.com/newsroom/images/2024/09/apple-debuts-iphone-16-pro-and-iphone-16-pro-max/tile/Apple-iPhone-16-Pro-hero-240909-lp.jpg.news_app_ed.jpg']
+    },
+    {
+      id: '2',
+      name: 'Samsung Galaxy S25',
+      price: 799,
+      image: 'https://diamu.com.bd/wp-content/uploads/2025/01/Samsung-Galaxy-S25.jpg',
+      category: 'Smartphones',
+      description: 'Meet the Galaxy S25 — Samsung\'s sleekest and smartest phone yet. Boasting a 6.8" AMOLED 2X display and Snapdragon Gen 4 processor.',
+      rating: 4.2,
+      reviews: 550,
+      inStock: true,
+      brand: 'Samsung',
+      images: ['https://diamu.com.bd/wp-content/uploads/2025/01/Samsung-Galaxy-S25.jpg']
+    },
+    // Add more mock products as needed...
+  ];
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
@@ -395,6 +386,40 @@ export function useApp() {
     throw new Error('useApp must be used within AppProvider');
   }
   return context;
+}
+
+// Product-specific hooks for easier access
+export function useProducts() {
+  const { state, dispatch } = useApp();
+  
+  const refreshProducts = async () => {
+    dispatch({ type: 'REFRESH_PRODUCTS' });
+    try {
+      const response = await productService.getProducts({ 
+        sortBy: 'createdAt', 
+        sortOrder: 'desc',
+        limit: 50 
+      });
+      
+      if (response.success && response.data?.products) {
+        dispatch({ type: 'SET_PRODUCTS', payload: response.data.products });
+      }
+    } catch (error) {
+      console.error('Error refreshing products:', error);
+      dispatch({ type: 'SET_PRODUCTS_ERROR', payload: 'Failed to refresh products' });
+    } finally {
+      dispatch({ type: 'SET_PRODUCTS_LOADING', payload: false });
+    }
+  };
+
+  return {
+    products: state.products,
+    categories: state.categories,
+    brands: state.brands,
+    isLoading: state.isLoadingProducts,
+    error: state.productsError,
+    refreshProducts,
+  };
 }
 
 // Helper functions

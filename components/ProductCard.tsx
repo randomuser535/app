@@ -9,13 +9,15 @@ interface ProductCardProps {
   layout?: 'grid' | 'list';
   showWishlistButton?: boolean;
   showShareButton?: boolean;
+  onPress?: (productId: string) => void;
 }
 
 export default function ProductCard({ 
   product, 
   layout = 'grid', 
   showWishlistButton = true,
-  showShareButton = false 
+  showShareButton = false,
+  onPress
 }: ProductCardProps) {
   const { state, dispatch } = useApp();
   const inWishlist = isInWishlist(state.wishlist, product.id);
@@ -83,7 +85,11 @@ export default function ProductCard({
   };
 
   const handleProductPress = () => {
-    router.push(`/product/${product.id}`);
+    if (onPress) {
+      onPress(product.id);
+    } else {
+      router.push(`/product/${product.id}`);
+    }
   };
 
   if (layout === 'list') {

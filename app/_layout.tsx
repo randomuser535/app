@@ -5,6 +5,7 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AppProvider } from '@/context/AppContext';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,20 +30,22 @@ export default function RootLayout() {
   }
 
   return (
-    <AppProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="product/[id]" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="checkout" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="auth/login" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="auth/signup" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="change-password" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="manage-addresses" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="product-reviews/[id]" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="order-details/[id]" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="product/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="checkout" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="auth/login" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="auth/signup" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="change-password" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="manage-addresses" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="product-reviews/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="order-details/[id]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style="auto" />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

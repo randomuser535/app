@@ -15,6 +15,7 @@ import { router } from 'expo-router';
 import { ArrowLeft, Camera, X } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
+import { productService, CreateProductData } from '@/services/productService';
 
 interface ProductForm {
   name: string;
@@ -29,7 +30,7 @@ interface ProductForm {
 }
 
 export default function AddProductScreen() {
-  const { dispatch } = useApp();
+  const { dispatch, refreshProducts } = useApp();
   const [formData, setFormData] = useState<ProductForm>({
     name: '',
     description: '',
@@ -74,36 +75,45 @@ export default function AddProductScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      const newProduct = {
-        id: Date.now().toString(),
+    try {
+      const productData: CreateProductData = {
         name: formData.name,
         description: formData.description,
         price: Number(formData.price),
         category: formData.category,
         brand: formData.brand,
+        sku: formData.sku,
+        inventoryCount: Number(formData.inventoryCount),
         inStock: formData.inStock && Number(formData.inventoryCount) > 0,
-        rating: 0,
-        reviews: 0,
-        image: formData.images[0] || 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400',
         images: formData.images.length > 0 ? formData.images : ['https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400'],
       };
 
-      dispatch({ type: 'ADD_PRODUCT', payload: newProduct });
+      const response = await productService.createProduct(productData);
+      
       setIsLoading(false);
       
-      Alert.alert(
-        'Success',
-        'Product added successfully!',
-        [
-          {
-            text: 'OK',
-            onPress: () => router.back(),
-          },
-        ]
-      );
-    }, 1500);
+      if (response.success && response.data?.product) {
+        // Add to local state for immediate UI update
+        dispatch({ type: 'ADD_PRODUCT', payload: response.data.product });
+        
+        Alert.alert(
+          'Success',
+          'Product added successfully!',
+          [
+            {
+              text: 'OK',
+              onPress: () => router.back(),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error', response.message || 'Failed to add product');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Add product error:', error);
+      Alert.alert('Error', 'Network error. Please try again.');
+    }
   };
 
   const handleAddImage = () => {

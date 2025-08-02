@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -14,9 +14,21 @@ import { router } from 'expo-router';
 import { ArrowLeft, Search, Plus, Filter, SquarePen as Edit, Trash2, Eye } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
+import { productService } from '@/services/productService';
+import { useProducts } from '@/hooks/useProducts';
 
 export default function AdminProductsScreen() {
-  const { state, dispatch } = useApp();
+  const { dispatch } = useApp();
+  const { 
+    products, 
+    isLoading, 
+    refresh, 
+    searchProducts, 
+    filterProducts 
+  } = useProducts({
+    initialFilters: { sortBy: 'createdAt', sortOrder: 'desc' },
+    pageSize: 50,
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -24,12 +36,33 @@ export default function AdminProductsScreen() {
 
   const categories = ['All', 'Smartphones', 'Laptops', 'Wearables', 'Headphones'];
 
-  const filteredProducts = state.products.filter(product => {
+  const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          product.brand.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  // Handle search with debouncing
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery.trim()) {
+        searchProducts(searchQuery);
+      } else {
+        filterProducts({ category: selectedCategory !== 'All' ? selectedCategory : undefined });
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  // Handle category filter
+  useEffect(() => {
+    filterProducts({ 
+      category: selectedCategory !== 'All' ? selectedCategory : undefined,
+      search: searchQuery.trim() || undefined,
+    });
+  }, [selectedCategory]);
 
   const handleSelectProduct = (productId: string) => {
     setSelectedProducts(prev => 
@@ -56,12 +89,29 @@ export default function AdminProductsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            selectedProducts.forEach(productId => {
-              dispatch({ type: 'REMOVE_PRODUCT', payload: productId });
-            });
-            setSelectedProducts([]);
-            Alert.alert('Success', 'Products deleted successfully');
+          onPress: async () => {
+            try {
+              // Delete products via API
+              const deletePromises = selectedProducts.map(productId => 
+                productService.deleteProduct(productId)
+              );
+              
+              await Promise.all(deletePromises);
+              
+              // Update local state
+              selectedProducts.forEach(productId => {
+                dispatch({ type: 'REMOVE_PRODUCT', payload: productId });
+              });
+              
+              setSelectedProducts([]);
+              Alert.alert('Success', 'Products deleted successfully');
+              
+              // Refresh the list
+              await refresh();
+            } catch (error) {
+              console.error('Bulk delete error:', error);
+              Alert.alert('Error', 'Failed to delete some products');
+            }
           },
         },
       ]
@@ -77,16 +127,28 @@ export default function AdminProductsScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            dispatch({ type: 'REMOVE_PRODUCT', payload: productId });
-            Alert.alert('Success', 'Product deleted successfully');
+          onPress: async () => {
+            try {
+              const response = await productService.deleteProduct(productId);
+              
+              if (response.success) {
+                dispatch({ type: 'REMOVE_PRODUCT', payload: productId });
+                Alert.alert('Success', 'Product deleted successfully');
+                await refresh();
+              } else {
+                Alert.alert('Error', response.message || 'Failed to delete product');
+              }
+            } catch (error) {
+              console.error('Delete product error:', error);
+              Alert.alert('Error', 'Network error. Please try again.');
+            }
           },
         },
       ]
     );
   };
 
-  const renderProductItem = ({ item }: { item: typeof state.products[0] }) => (
+  const renderProductItem = ({ item }: { item: typeof products[0] }) => (
     <TouchableOpacity 
       style={[
         styles.productCard,
@@ -245,28 +307,36 @@ export default function AdminProductsScreen() {
       )}
 
       {/* Products List */}
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProductItem}
-        contentContainerStyle={styles.productsList}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No products found</Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery ? 'Try adjusting your search' : 'Add your first product to get started'}
-            </Text>
-            {!searchQuery && (
-              <Button
-                title="Add Product"
-                onPress={() => router.push('/admin/products/add')}
-                size="large"
-              />
-            )}
-          </View>
-        )}
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading products...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(item) => item.id}
+          renderItem={renderProductItem}
+          contentContainerStyle={styles.productsList}
+          showsVerticalScrollIndicator={false}
+          onRefresh={refresh}
+          refreshing={isLoading}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No products found</Text>
+              <Text style={styles.emptySubtext}>
+                {searchQuery ? 'Try adjusting your search' : 'Add your first product to get started'}
+              </Text>
+              {!searchQuery && (
+                <Button
+                  title="Add Product"
+                  onPress={() => router.push('/admin/products/add')}
+                  size="large"
+                />
+              )}
+            </View>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -532,5 +602,16 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     marginBottom: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
 });
