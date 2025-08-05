@@ -17,18 +17,18 @@ import Button from '@/components/Button';
 
 export default function AdminLoginScreen() {
   const [credentials, setCredentials] = useState({
-    username: '',
+    email: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ username?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const validateForm = (): boolean => {
-    const newErrors: { username?: string; password?: string } = {};
+    const newErrors: { email?: string; password?: string } = {};
 
-    if (!credentials.username.trim()) {
-      newErrors.username = 'Username is required';
+    if (!credentials.email.trim()) {
+      newErrors.email = 'Email is required';
     }
 
     if (!credentials.password.trim()) {
@@ -44,33 +44,31 @@ export default function AdminLoginScreen() {
 
     setIsLoading(true);
 
-    // Simulate API call - In production, this would authenticate with your backend
-    setTimeout(async () => {
-      // Credentials 
-      if (credentials.username === 'admin@onetech.com' && credentials.password === 'One@Admin') {
-        try {
-          const adminSession = {
-            id: 'admin-1',
-            username: credentials.username,
-            role: 'admin',
-            loginTime: new Date().toISOString(),
-          };
+    try {
+      // Hardcoded admin credentials check
+      if (credentials.email === 'admin@onetech.com' && credentials.password === 'One@Admin') {
+        // Create admin session for the frontend
+        const adminSession = {
+          id: 'admin-1',
+          email: credentials.email,
+          role: 'admin',
+          loginTime: new Date().toISOString(),
+        };
 
-          await AsyncStorage.setItem('adminSession', JSON.stringify(adminSession));
-          setIsLoading(false);
-          router.replace('/admin/dashboard');
-        } catch (error) {
-          setIsLoading(false);
-          Alert.alert('Error', 'Failed to save session');
-        }
+        await AsyncStorage.setItem('adminSession', JSON.stringify(adminSession));
+        router.replace('/admin/dashboard');
       } else {
-        setIsLoading(false);
-        Alert.alert('Invalid Credentials', 'Please check your username and password');
+        Alert.alert('Invalid Credentials', 'Please check your email and password');
       }
-    }, 1500);
+    } catch (error) {
+      console.error('Admin login error:', error);
+      Alert.alert('Error', 'Failed to save session');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const clearError = (field: 'username' | 'password') => {
+  const clearError = (field: 'email' | 'password') => {
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: undefined }));
     }
@@ -94,19 +92,20 @@ export default function AdminLoginScreen() {
 
         <View style={styles.form}>
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Username</Text>
+            <Text style={styles.label}>Email</Text>
             <TextInput
-              style={[styles.input, errors.username && styles.inputError]}
-              value={credentials.username}
+              style={[styles.input, errors.email && styles.inputError]}
+              value={credentials.email}
               onChangeText={(text) => {
-                setCredentials(prev => ({ ...prev, username: text }));
-                clearError('username');
+                setCredentials(prev => ({ ...prev, email: text }));
+                clearError('email');
               }}
-              placeholder="Enter admin username"
+              placeholder="Enter admin email"
+              keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
           </View>
 
           <View style={styles.inputContainer}>

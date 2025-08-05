@@ -5,63 +5,68 @@ import {
   ScrollView, 
   StyleSheet, 
   TouchableOpacity, 
-  FlatList,
   TextInput,
-  Alert
+  Alert,
+  RefreshControl,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Bell, Grid3x3 as Grid3X3, List, Search } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useApp } from '@/context/AppContext';
-import ProductCard from '@/components/ProductCard';
+import { useApp, useProducts } from '@/context/AppContext';
+import ProductList from '@/components/ProductList';
 import LoadingSpinner from '@/components/LoadingSpinner';
-
-const categories = ['All', 'Smartphones', 'Laptops', 'Wearables', 'Headphones'];
+import { ProductFilters } from '@/services/productService'
 
 export default function HomeScreen() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
+  const { products, categories: apiCategories, refreshProducts } = useProducts();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const filteredProducts = state.products.filter(product => {
-    const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         product.brand.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filter products based on selected category and search query
+  const filteredProducts = products.filter((product) => {
+    const matchesCategory =
+      selectedCategory === 'All' || product.category === selectedCategory;
+    const matchesSearch =
+      !searchQuery.trim() ||
+      product.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const handleAddToCart = (productId: string) => {
-    const product = state.products.find(p => p.id === productId);
-    if (product) {
-      dispatch({ type: 'ADD_TO_CART', payload: product });
-      Alert.alert('Success', 'Product added to cart!');
+  // Combine 'All' with API categories
+  const categories = ['All', ...apiCategories];
+
+  // Build filters based on current selections
+  const getFilters = (): ProductFilters => {
+    const filters: ProductFilters = {};
+    
+    if (selectedCategory !== 'All') {
+      filters.category = selectedCategory;
     }
+    
+    if (searchQuery.trim()) {
+      filters.search = searchQuery.trim();
+    }
+    
+    return filters;
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshProducts();
+    setIsRefreshing(false);
   };
 
   const handleNotificationPress = () => {
     router.push('/notifications');
   };
 
-  if (state.isLoading) {
-    return <LoadingSpinner />;
-  }
-
-  type Product = typeof state.products[number];
-
-  const renderProduct = ({ item, index }: { item: Product; index: number }) => (
-    <View style={viewMode === 'grid' ? styles.gridItem : styles.listItem}>
-      <ProductCard 
-        product={item} 
-        layout={viewMode} 
-        showWishlistButton={true}
-        showShareButton={false}
-      />
-    </View>
-  );
-
-  return (
-    <SafeAreaView style={styles.container}>
+  // Header component for the FlatList
+  const renderHeader = () => (
+    <>
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -88,32 +93,33 @@ export default function HomeScreen() {
       </View>
 
       {/* Categories */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesContainer}
-        contentContainerStyle={styles.categories}
-      >
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={[
-              styles.categoryChip,
-              selectedCategory === category && styles.categoryChipActive,
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text
+      <View style={styles.categoriesContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categories}
+        >
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category}
               style={[
-                styles.categoryText,
-                selectedCategory === category && styles.categoryTextActive,
+                styles.categoryChip,
+                selectedCategory === category && styles.categoryChipActive,
               ]}
+              onPress={() => setSelectedCategory(category)}
             >
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+              <Text
+                style={[
+                  styles.categoryText,
+                  selectedCategory === category && styles.categoryTextActive,
+                ]}
+              >
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* View Toggle */}
       <View style={styles.viewToggle}>
@@ -135,17 +141,32 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+    </>
+  );
 
-      {/* Products Grid/List */}
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProduct}
+  if (state.isLoading || state.isLoadingProducts) {
+    return <LoadingSpinner />;
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Option 1: Use ProductList with ListHeaderComponent if it supports it */}
+      <ProductList
+        filters={getFilters()}
+        layout={viewMode}
         numColumns={viewMode === 'grid' ? 2 : 1}
-        key={viewMode} // Force re-render when view mode changes
+        showLoadMore={true}
+        onProductPress={(productId) => router.push(`/product/${productId}`)}
         contentContainerStyle={styles.productsContainer}
-        showsVerticalScrollIndicator={false}
-        columnWrapperStyle={viewMode === 'grid' ? styles.row : undefined}
+        ListHeaderComponent={renderHeader}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#2563EB']}
+            tintColor="#2563EB"
+          />
+        }
       />
     </SafeAreaView>
   );

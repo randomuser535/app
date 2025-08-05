@@ -6,9 +6,9 @@ const {
   logout,
   getMe,
   updateProfile,
-  changePassword
+  changePassword,
+  promoteToAdmin
 } = require('../controllers/authController');
-const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -20,8 +20,8 @@ const signupValidation = [
     .trim()
     .isLength({ min: 2, max: 50 })
     .withMessage('Name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s]+$/)
-    .withMessage('Name can only contain letters and spaces'),
+    .matches(/^[a-zA-Z\s\-\'.]+$/)
+    .withMessage('Name can only contain letters, spaces, hyphens, and apostrophes'),
     
   body('email')
     .isEmail()
@@ -63,8 +63,8 @@ const profileUpdateValidation = [
     .trim()
     .isLength({ min: 2, max: 50 })
     .withMessage('Name must be between 2 and 50 characters')
-    .matches(/^[a-zA-Z\s]+$/)
-    .withMessage('Name can only contain letters and spaces'),
+    .matches(/^[a-zA-Z\s\-\'.]+$/)
+    .withMessage('Name can only contain letters, spaces, hyphens, and apostrophes'),
     
   body('phone')
     .optional()
@@ -93,13 +93,9 @@ const changePasswordValidation = [
     })
 ];
 
-// Public routes
+// All routes are now public (no authentication required)
 router.post('/signup', signupValidation, signup);
 router.post('/login', loginValidation, login);
-
-// Protected routes
-router.use(authenticateToken); // Apply authentication to all routes below
-
 router.post('/logout', logout);
 router.get('/me', getMe);
 router.put('/profile', profileUpdateValidation, updateProfile);

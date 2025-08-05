@@ -218,11 +218,26 @@ const logout = async (req, res) => {
 /**
  * @desc    Get current logged in user
  * @route   GET /api/auth/me
- * @access  Private
+ * @access  Public (simplified for demo)
  */
 const getMe = async (req, res) => {
   try {
+    // For simple project, return empty user if no authentication
+    if (!req.user?.id) {
+      return res.status(200).json({
+        success: false,
+        message: 'No user logged in'
+      });
+    }
+
     const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -252,10 +267,18 @@ const getMe = async (req, res) => {
 /**
  * @desc    Update user profile
  * @route   PUT /api/auth/profile
- * @access  Private
+ * @access  Public (simplified for demo)
  */
 const updateProfile = async (req, res) => {
   try {
+    // For simple project, require user ID in request body
+    if (!req.user?.id && !req.body.userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID required'
+      });
+    }
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -265,10 +288,11 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    const { name, phone } = req.body;
+    const { name, phone, userId } = req.body;
+    const targetUserId = req.user?.id || userId;
     
     const user = await User.findByIdAndUpdate(
-      req.user.id,
+      targetUserId,
       { name, phone },
       { new: true, runValidators: true }
     );
@@ -299,10 +323,18 @@ const updateProfile = async (req, res) => {
 /**
  * @desc    Change password
  * @route   PUT /api/auth/change-password
- * @access  Private
+ * @access  Public (simplified for demo)
  */
 const changePassword = async (req, res) => {
   try {
+    // For simple project, require user ID in request body
+    if (!req.user?.id && !req.body.userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID required'
+      });
+    }
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -312,10 +344,18 @@ const changePassword = async (req, res) => {
       });
     }
 
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword, userId } = req.body;
+    const targetUserId = req.user?.id || userId;
 
     // Get user with password
-    const user = await User.findById(req.user.id).select('+password');
+    const user = await User.findById(targetUserId).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
 
     // Check current password
     const isCurrentPasswordCorrect = await user.comparePassword(currentPassword);
@@ -343,11 +383,61 @@ const changePassword = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Promote user to admin (Development/Testing only)
+ * @route   POST /api/auth/promote-admin
+ * @access  Public (should be removed in production)
+ */
+const promoteToAdmin = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.role = 'admin';
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'User promoted to admin successfully',
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Promote to admin error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during user promotion'
+    });
+  }
+};
+
 module.exports = {
   signup,
   login,
   logout,
   getMe,
   updateProfile,
-  changePassword
+  changePassword,
+  promoteToAdmin
 };

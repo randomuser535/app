@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -11,12 +11,10 @@ import {
   Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Camera, X, Save } from 'lucide-react-native';
+import { router } from 'expo-router';
+import { ArrowLeft, Plus, X } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
-import { productService, CreateProductData } from '@/services/productService';
-import { useProduct } from '@/hooks/useProduct';
 
 interface ProductForm {
   name: string;
@@ -30,10 +28,8 @@ interface ProductForm {
   images: string[];
 }
 
-export default function EditProductScreen() {
-  const { id } = useLocalSearchParams();
+export default function AddProductScreen() {
   const { dispatch } = useApp();
-  const { product: apiProduct, isLoading: isLoadingProduct } = useProduct(id as string);
   const [formData, setFormData] = useState<ProductForm>({
     name: '',
     description: '',
@@ -47,24 +43,10 @@ export default function EditProductScreen() {
   });
   const [errors, setErrors] = useState<Partial<ProductForm>>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState('');
+  const [imageUrlError, setImageUrlError] = useState('');
 
   const categories = ['Smartphones', 'Laptops', 'Wearables', 'Headphones', 'Accessories'];
-
-  useEffect(() => {
-    if (apiProduct) {
-      setFormData({
-        name: apiProduct.name,
-        description: apiProduct.description,
-        price: apiProduct.price.toString(),
-        sku: apiProduct.sku || apiProduct.id,
-        category: apiProduct.category,
-        brand: apiProduct.brand,
-        inventoryCount: apiProduct.inventoryCount?.toString() || '50',
-        inStock: apiProduct.inStock,
-        images: apiProduct.images || [apiProduct.image],
-      });
-    }
-  }, [apiProduct]);
 
   const validateForm = (): boolean => {
     const newErrors: Partial<ProductForm> = {};
@@ -89,13 +71,66 @@ export default function EditProductScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validateImageUrl = (url: string): boolean => {
+    if (!url.trim()) {
+      setImageUrlError('Image URL is required');
+      return false;
+    }
+
+    try {
+      new URL(url);
+      // Check if URL contains common image indicators
+      const imageIndicators = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', 'images.pexels.com', 'unsplash.com', 'imgur.com'];
+      const hasImageIndicator = imageIndicators.some(indicator => 
+        url.toLowerCase().indexOf(indicator) !== -1
+      );
+      
+      if (!hasImageIndicator) {
+        setImageUrlError('Please enter a valid image URL');
+        return false;
+      }
+
+      setImageUrlError('');
+      return true;
+    } catch {
+      setImageUrlError('Please enter a valid URL');
+      return false;
+    }
+  };
+
+  const handleAddImageUrl = () => {
+    if (!validateImageUrl(currentImageUrl)) return;
+
+    // Check if URL is already added
+    if (formData.images.indexOf(currentImageUrl) !== -1) {
+      setImageUrlError('This image URL has already been added');
+      return;
+    }
+
+    setFormData((prev: ProductForm) => ({
+      ...prev,
+      images: [...prev.images, currentImageUrl],
+    }));
+    setCurrentImageUrl('');
+    setImageUrlError('');
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setFormData((prev: ProductForm) => ({
+      ...prev,
+      images: prev.images.filter((_: string, i: number) => i !== index),
+    }));
+  };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
 
-    try {
-      const updateData: Partial<CreateProductData> = {
+    // Create product locally (fallback when API is not available)
+    setTimeout(() => {
+      const newProduct = {
+        id: Date.now().toString(),
         name: formData.name,
         description: formData.description,
         price: Number(formData.price),
@@ -104,95 +139,34 @@ export default function EditProductScreen() {
         sku: formData.sku,
         inventoryCount: Number(formData.inventoryCount),
         inStock: formData.inStock && Number(formData.inventoryCount) > 0,
-        images: formData.images,
+        rating: 0,
+        reviews: 0,
+        image: formData.images[0] || 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400',
+        images: formData.images.length > 0 ? formData.images : ['https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400'],
       };
 
-      const response = await productService.updateProduct(id as string, updateData);
-      
+      dispatch({ type: 'ADD_PRODUCT', payload: newProduct });
       setIsLoading(false);
       
-      if (response.success && response.data?.product) {
-        // Update local state for immediate UI update
-        dispatch({ type: 'UPDATE_PRODUCT', payload: response.data.product });
-        
-        Alert.alert(
-          'Success',
-          'Product updated successfully!',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.back(),
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Error', response.message || 'Failed to update product');
-      }
-    } catch (error) {
-      setIsLoading(false);
-      console.error('Update product error:', error);
-      Alert.alert('Error', 'Network error. Please try again.');
-    }
-  };
-
-  const handleAddImage = () => {
-    const sampleImages = [
-      'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400',
-      'https://images.pexels.com/photos/699122/pexels-photo-699122.jpeg?auto=compress&cs=tinysrgb&w=400',
-      'https://images.pexels.com/photos/1649771/pexels-photo-1649771.jpeg?auto=compress&cs=tinysrgb&w=400',
-    ];
-    
-    const randomImage = sampleImages[Math.floor(Math.random() * sampleImages.length)];
-    setFormData(prev => ({
-      ...prev,
-      images: [...prev.images, randomImage],
-    }));
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      images: prev.images.filter((_, i) => i !== index),
-    }));
+      Alert.alert(
+        'Success',
+        'Product added successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.back(),
+          },
+        ]
+      );
+    }, 1500);
   };
 
   const updateFormData = (field: keyof ProductForm, value: string | boolean) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev: ProductForm) => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
+      setErrors((prev: Partial<ProductForm>) => ({ ...prev, [field]: undefined }));
     }
   };
-
-  if (isLoadingProduct) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color="#1E293B" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Edit Product</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading product...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!apiProduct) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorTextLarge}>Product not found</Text>
-          <Button title="Go Back" onPress={() => router.back()} />
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -204,14 +178,8 @@ export default function EditProductScreen() {
         >
           <ArrowLeft size={24} color="#1E293B" />
         </TouchableOpacity>
-        <Text style={styles.title}>Edit Product</Text>
-        <TouchableOpacity 
-          style={styles.saveButton}
-          onPress={handleSubmit}
-          disabled={isLoading}
-        >
-          <Save size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <Text style={styles.title}>Add Product</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -219,30 +187,62 @@ export default function EditProductScreen() {
           {/* Product Images */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Product Images</Text>
-            <View style={styles.imagesContainer}>
-              {formData.images.map((image, index) => (
-                <View key={index} style={styles.imageItem}>
-                  <Image source={{ uri: image }} style={styles.productImage} />
-                  <TouchableOpacity
-                    style={styles.removeImageButton}
-                    onPress={() => handleRemoveImage(index)}
-                  >
-                    <X size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                  {index === 0 && (
-                    <View style={styles.primaryBadge}>
-                      <Text style={styles.primaryText}>Primary</Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-              {formData.images.length < 5 && (
-                <TouchableOpacity style={styles.addImageButton} onPress={handleAddImage}>
-                  <Camera size={24} color="#64748B" />
-                  <Text style={styles.addImageText}>Add Image</Text>
+            
+            {/* Image URL Input */}
+            <View style={styles.imageUrlContainer}>
+              <View style={styles.imageUrlInputContainer}>
+                <TextInput
+                  style={[styles.imageUrlInput, imageUrlError ? styles.inputError : null]}
+                  value={currentImageUrl}
+                  onChangeText={(text: string) => {
+                    setCurrentImageUrl(text);
+                    if (imageUrlError) setImageUrlError('');
+                  }}
+                  placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={[styles.addUrlButton, !currentImageUrl.trim() ? styles.addUrlButtonDisabled : null]}
+                  onPress={handleAddImageUrl}
+                  disabled={!currentImageUrl.trim()}
+                >
+                  <Plus size={20} color={currentImageUrl.trim() ? "#FFFFFF" : "#94A3B8"} />
                 </TouchableOpacity>
-              )}
+              </View>
+              {imageUrlError ? <Text style={styles.errorText}>{imageUrlError}</Text> : null}
+              <Text style={styles.helperText}>
+                Supported formats: JPG, PNG, GIF, WebP. Maximum 5 images.
+              </Text>
             </View>
+
+            {/* Image Preview */}
+            {formData.images.length > 0 && (
+              <View style={styles.imagesContainer}>
+                {formData.images.map((image: string, index: number) => (
+                  <View key={index} style={styles.imageItem}>
+                    <Image 
+                      source={{ uri: image }} 
+                      style={styles.productImage}
+                      onError={() => {
+                        Alert.alert('Image Error', 'Failed to load image. Please check the URL.');
+                      }}
+                    />
+                    <TouchableOpacity
+                      style={styles.removeImageButton}
+                      onPress={() => handleRemoveImage(index)}
+                    >
+                      <X size={16} color="#FFFFFF" />
+                    </TouchableOpacity>
+                    {index === 0 && (
+                      <View style={styles.primaryBadge}>
+                        <Text style={styles.primaryText}>Primary</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Basic Information */}
@@ -252,62 +252,62 @@ export default function EditProductScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Product Name *</Text>
               <TextInput
-                style={[styles.input, errors.name && styles.inputError]}
+                style={[styles.input, errors.name ? styles.inputError : null]}
                 value={formData.name}
-                onChangeText={(text) => updateFormData('name', text)}
+                onChangeText={(text: string) => updateFormData('name', text)}
                 placeholder="Enter product name"
               />
-              {errors.name && <Text style={styles.errorText}>{errors.name}</Text>}
+              {errors.name ? <Text style={styles.errorText}>{errors.name}</Text> : null}
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Description *</Text>
               <TextInput
-                style={[styles.textArea, errors.description && styles.inputError]}
+                style={[styles.textArea, errors.description ? styles.inputError : null]}
                 value={formData.description}
-                onChangeText={(text) => updateFormData('description', text)}
+                onChangeText={(text: string) => updateFormData('description', text)}
                 placeholder="Enter product description"
                 multiline
                 numberOfLines={4}
                 textAlignVertical="top"
               />
-              {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
+              {errors.description ? <Text style={styles.errorText}>{errors.description}</Text> : null}
             </View>
 
             <View style={styles.row}>
               <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
                 <Text style={styles.label}>Price *</Text>
                 <TextInput
-                  style={[styles.input, errors.price && styles.inputError]}
+                  style={[styles.input, errors.price ? styles.inputError : null]}
                   value={formData.price}
-                  onChangeText={(text) => updateFormData('price', text)}
+                  onChangeText={(text: string) => updateFormData('price', text)}
                   placeholder="0.00"
                   keyboardType="numeric"
                 />
-                {errors.price && <Text style={styles.errorText}>{errors.price}</Text>}
+                {errors.price ? <Text style={styles.errorText}>{errors.price}</Text> : null}
               </View>
               
               <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
                 <Text style={styles.label}>SKU *</Text>
                 <TextInput
-                  style={[styles.input, errors.sku && styles.inputError]}
+                  style={[styles.input, errors.sku ? styles.inputError : null]}
                   value={formData.sku}
-                  onChangeText={(text) => updateFormData('sku', text)}
+                  onChangeText={(text: string) => updateFormData('sku', text)}
                   placeholder="Enter SKU"
                 />
-                {errors.sku && <Text style={styles.errorText}>{errors.sku}</Text>}
+                {errors.sku ? <Text style={styles.errorText}>{errors.sku}</Text> : null}
               </View>
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Brand *</Text>
               <TextInput
-                style={[styles.input, errors.brand && styles.inputError]}
+                style={[styles.input, errors.brand ? styles.inputError : null]}
                 value={formData.brand}
-                onChangeText={(text) => updateFormData('brand', text)}
+                onChangeText={(text: string) => updateFormData('brand', text)}
                 placeholder="Enter brand name"
               />
-              {errors.brand && <Text style={styles.errorText}>{errors.brand}</Text>}
+              {errors.brand ? <Text style={styles.errorText}>{errors.brand}</Text> : null}
             </View>
           </View>
 
@@ -320,20 +320,20 @@ export default function EditProductScreen() {
                   key={category}
                   style={[
                     styles.categoryChip,
-                    formData.category === category && styles.selectedCategory
+                    formData.category === category ? styles.selectedCategory : null
                   ]}
                   onPress={() => updateFormData('category', category)}
                 >
                   <Text style={[
                     styles.categoryText,
-                    formData.category === category && styles.selectedCategoryText
+                    formData.category === category ? styles.selectedCategoryText : null
                   ]}>
                     {category}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
+            {errors.category ? <Text style={styles.errorText}>{errors.category}</Text> : null}
           </View>
 
           {/* Inventory */}
@@ -343,20 +343,20 @@ export default function EditProductScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Inventory Count *</Text>
               <TextInput
-                style={[styles.input, errors.inventoryCount && styles.inputError]}
+                style={[styles.input, errors.inventoryCount ? styles.inputError : null]}
                 value={formData.inventoryCount}
-                onChangeText={(text) => updateFormData('inventoryCount', text)}
+                onChangeText={(text: string) => updateFormData('inventoryCount', text)}
                 placeholder="Enter inventory count"
                 keyboardType="numeric"
               />
-              {errors.inventoryCount && <Text style={styles.errorText}>{errors.inventoryCount}</Text>}
+              {errors.inventoryCount ? <Text style={styles.errorText}>{errors.inventoryCount}</Text> : null}
             </View>
 
             <View style={styles.switchContainer}>
               <Text style={styles.label}>In Stock</Text>
               <Switch
                 value={formData.inStock}
-                onValueChange={(value) => updateFormData('inStock', value)}
+                onValueChange={(value: boolean) => updateFormData('inStock', value)}
                 trackColor={{ false: '#E2E8F0', true: '#2563EB' }}
                 thumbColor="#FFFFFF"
               />
@@ -365,7 +365,7 @@ export default function EditProductScreen() {
 
           <View style={styles.submitContainer}>
             <Button
-              title="Update Product"
+              title="Add Product"
               onPress={handleSubmit}
               loading={isLoading}
               fullWidth
@@ -393,10 +393,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  placeholder: {
-    width: 40,
-    height: 40,
-  },
   backButton: {
     width: 40,
     height: 40,
@@ -410,13 +406,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#1E293B',
   },
-  saveButton: {
+  placeholder: {
     width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#10B981',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   form: {
     padding: 20,
@@ -468,23 +459,6 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontFamily: 'Inter-Bold',
     color: '#FFFFFF',
-  },
-  addImageButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-  },
-  addImageText: {
-    fontSize: 10,
-    fontFamily: 'Inter-Medium',
-    color: '#64748B',
-    marginTop: 4,
   },
   inputGroup: {
     marginBottom: 16,
@@ -562,28 +536,40 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   submitContainer: {
-    marginTop: 32,
+    marginTop: 2,
   },
-  errorContainer: {
-    flex: 1,
+  imageUrlContainer: {
+    marginBottom: 16,
+  },
+  imageUrlInputContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 40,
+    gap: 8,
   },
-  errorTextLarge: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E293B',
-    marginBottom: 20,
-  },
-  loadingContainer: {
+  imageUrlInput: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    backgroundColor: '#FFFFFF',
+  },
+  addUrlButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addUrlButtonDisabled: {
+    backgroundColor: '#E2E8F0',
+  },
+  helperText: {
+    fontSize: 12,
     color: '#64748B',
+    marginTop: 4,
   },
 });

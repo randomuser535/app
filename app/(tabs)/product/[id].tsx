@@ -14,25 +14,50 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
 import { ArrowLeft, Star, Heart, Share, ShoppingCart, ChevronRight } from 'lucide-react-native';
 import { useApp, isInWishlist } from '@/context/AppContext';
+import { useProduct } from '@/hooks/useProduct';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams();
-  const { state, dispatch } = useApp();
+  const { dispatch } = useApp();
+  const { product, isLoading, error, refresh } = useProduct(id as string);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [quantity, setQuantity] = useState(1);
 
-  const product = state.products.find(p => p.id === id);
+  const { state } = useApp();
   const inWishlist = product ? isInWishlist(state.wishlist, product.id) : false;
 
-  if (!product) {
+  // Show loading spinner while fetching product
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+            <ArrowLeft size={24} color="#1E293B" />
+          </TouchableOpacity>
+        </View>
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
+  // Show error state
+  if (error || !product) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
+            <ArrowLeft size={24} color="#1E293B" />
+          </TouchableOpacity>
+        </View>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Product not found</Text>
-          <Button title="Go Back" onPress={() => router.back()} />
+          <Text style={styles.errorText}>{error || 'Product not found'}</Text>
+          <View style={styles.errorActions}>
+            <Button title="Try Again" onPress={refresh} variant="outline" />
+            <Button title="Go Back" onPress={() => router.back()} />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -534,5 +559,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#1E293B',
     marginBottom: 20,
+    textAlign: 'center',
+  },
+  errorActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
 });

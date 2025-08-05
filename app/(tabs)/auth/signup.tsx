@@ -55,8 +55,8 @@ export default function SignupScreen() {
       newErrors.name = 'Full name is required';
     } else if (formData.name.trim().length < 2) {
       newErrors.name = 'Name must be at least 2 characters';
-    } else if (!/^[a-zA-Z\s]+$/.test(formData.name.trim())) {
-      newErrors.name = 'Name can only contain letters and spaces';
+    } else if (!/^[a-zA-Z\s\-\'.]+$/.test(formData.name.trim())) {
+      newErrors.name = 'Name can only contain letters, spaces, hyphens, and apostrophes';
     }
 
     if (!formData.email.trim()) {

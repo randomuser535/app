@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-const API_BASE_URL = 'http://192.168.0.174:5020/api';
+// Use localhost for web, IP address for mobile
+const API_BASE_URL = Platform.OS === 'web' 
+  ? 'http://localhost:5020/api' 
+  : 'http://192.168.0.174:5020/api';
 
 export interface Address {
   id: string;

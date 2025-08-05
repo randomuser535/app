@@ -5,12 +5,15 @@ import {
   TextInput, 
   FlatList, 
   TouchableOpacity, 
-  StyleSheet 
+  StyleSheet, 
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Filter, X, SlidersHorizontal } from 'lucide-react-native';
-import { useApp } from '@/context/AppContext';
+import { useApp, useProducts } from '@/context/AppContext';
 import ProductCard from '@/components/ProductCard';
+import { ProductFilters } from '@/services/productService';
+import ProductList from '@/components/ProductList';
 
 const sortOptions = [
   { label: 'Featured', value: 'featured' },
@@ -28,59 +31,59 @@ const priceRanges = [
 ];
 
 export default function SearchScreen() {
-  const { state } = useApp();
+  const { categories: apiCategories, brands: apiBrands } = useProducts();
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [selectedSort, setSelectedSort] = useState('featured');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedPriceRange, setSelectedPriceRange] = useState<number | null>(null);
   const [minRating, setMinRating] = useState(0);
 
-  const categories = useMemo(() => {
-    const cats = new Set(state.products.map(p => p.category));
-    return Array.from(cats);
-  }, [state.products]);
-
-  const filteredAndSortedProducts = useMemo(() => {
-    let filtered = state.products.filter(product => {
-      const matchesSearch = searchQuery === '' || 
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesCategory = selectedCategories.length === 0 || 
-        selectedCategories.includes(product.category);
-
-      const matchesPrice = selectedPriceRange === null || 
-        (product.price >= priceRanges[selectedPriceRange].min && 
-         product.price <= priceRanges[selectedPriceRange].max);
-
-      const matchesRating = product.rating >= minRating;
-
-      return matchesSearch && matchesCategory && matchesPrice && matchesRating;
-    });
-
-    // Sort products
+  // Build filters for ProductList
+  const getFilters = (): ProductFilters => {
+    const filters: ProductFilters = {};
+    
+    if (searchQuery.trim()) {
+      filters.search = searchQuery.trim();
+    }
+    
+    if (selectedCategories.length > 0) {
+      filters.category = selectedCategories[0]; // API typically supports single category
+    }
+    
+    if (selectedPriceRange !== null) {
+      filters.minPrice = priceRanges[selectedPriceRange].min;
+      if (priceRanges[selectedPriceRange].max !== Infinity) {
+        filters.maxPrice = priceRanges[selectedPriceRange].max;
+      }
+    }
+    
+    // Convert sort selection to API format
     switch (selectedSort) {
       case 'price_asc':
-        filtered.sort((a, b) => a.price - b.price);
+        filters.sortBy = 'price';
+        filters.sortOrder = 'asc';
         break;
       case 'price_desc':
-        filtered.sort((a, b) => b.price - a.price);
+        filters.sortBy = 'price';
+        filters.sortOrder = 'desc';
         break;
       case 'rating':
-        filtered.sort((a, b) => b.rating - a.rating);
+        filters.sortBy = 'rating';
+        filters.sortOrder = 'desc';
         break;
       case 'name_asc':
-        filtered.sort((a, b) => a.name.localeCompare(b.name));
+        filters.sortBy = 'name';
+        filters.sortOrder = 'asc';
         break;
       default:
-        // Keep original order for 'featured'
+        // Featured - use default API sorting
         break;
     }
-
-    return filtered;
-  }, [state.products, searchQuery, selectedSort, selectedCategories, selectedPriceRange, minRating]);
+    
+    return filters;
+  };
 
   const toggleCategory = (category: string) => {
     setSelectedCategories(prev => 
@@ -90,22 +93,26 @@ export default function SearchScreen() {
     );
   };
 
+  const toggleBrand = (brand: string) => {
+    setSelectedBrands(prev => 
+      prev.includes(brand) 
+        ? prev.filter(b => b !== brand)
+        : [...prev, brand]
+    );
+  };
+
   const clearFilters = () => {
     setSelectedCategories([]);
+    setSelectedBrands([]);
     setSelectedPriceRange(null);
     setMinRating(0);
     setSelectedSort('featured');
   };
 
   const activeFiltersCount = selectedCategories.length + 
+    selectedBrands.length +
     (selectedPriceRange !== null ? 1 : 0) + 
     (minRating > 0 ? 1 : 0);
-
-  const renderProduct = ({ item }: { item: typeof state.products[0] }) => (
-    <View style={styles.productItem}>
-      <ProductCard product={item} layout="list" />
-    </View>
-  );
 
   const renderSortOption = ({ item }: { item: { label: string; value: string } }) => (
     <TouchableOpacity
@@ -118,12 +125,16 @@ export default function SearchScreen() {
     </TouchableOpacity>
   );
 
-  const renderCategory = ({ item }: { item: string }) => (
+  const renderFilterChip = ({ item, isSelected, onToggle }: { 
+    item: string; 
+    isSelected: boolean; 
+    onToggle: (item: string) => void;
+  }) => (
     <TouchableOpacity
-      style={[styles.filterOption, selectedCategories.includes(item) && styles.selectedOption]}
-      onPress={() => toggleCategory(item)}
+      style={[styles.filterOption, isSelected && styles.selectedOption]}
+      onPress={() => onToggle(item)}
     >
-      <Text style={[styles.filterOptionText, selectedCategories.includes(item) && styles.selectedOptionText]}>
+      <Text style={[styles.filterOptionText, isSelected && styles.selectedOptionText]}>
         {item}
       </Text>
     </TouchableOpacity>
@@ -186,9 +197,7 @@ export default function SearchScreen() {
 
       {/* Results count */}
       <View style={styles.resultsContainer}>
-        <Text style={styles.resultsText}>
-          {filteredAndSortedProducts.length} products found
-        </Text>
+        <Text style={styles.resultsText}>Search Results</Text>
         {activeFiltersCount > 0 && (
           <TouchableOpacity onPress={clearFilters}>
             <Text style={styles.clearFiltersText}>Clear filters</Text>
@@ -202,57 +211,72 @@ export default function SearchScreen() {
           {/* Sort */}
           <View style={styles.filterSection}>
             <Text style={styles.filterSectionTitle}>Sort by</Text>
-            <FlatList
-              data={sortOptions}
+            <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item.value}
-              renderItem={renderSortOption}
               contentContainerStyle={styles.filterOptions}
-            />
+            >
+              {sortOptions.map((option) => renderSortOption({ item: option }))}
+            </ScrollView>
           </View>
 
           {/* Categories */}
           <View style={styles.filterSection}>
             <Text style={styles.filterSectionTitle}>Categories</Text>
-            <FlatList
-              data={categories}
+            <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(item) => item}
-              renderItem={renderCategory}
               contentContainerStyle={styles.filterOptions}
-            />
+            >
+              {apiCategories.map((category) => 
+                renderFilterChip({ 
+                  item: category, 
+                  isSelected: selectedCategories.includes(category),
+                  onToggle: toggleCategory
+                })
+              )}
+            </ScrollView>
+          </View>
+
+          {/* Brands */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterSectionTitle}>Brands</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterOptions}
+            >
+              {apiBrands.map((brand) => 
+                renderFilterChip({ 
+                  item: brand, 
+                  isSelected: selectedBrands.includes(brand),
+                  onToggle: toggleBrand
+                })
+              )}
+            </ScrollView>
           </View>
 
           {/* Price Range */}
           <View style={styles.filterSection}>
             <Text style={styles.filterSectionTitle}>Price Range</Text>
-            <FlatList
-              data={priceRanges}
+            <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={(item, index) => index.toString()}
-              renderItem={renderPriceRange}
               contentContainerStyle={styles.filterOptions}
-            />
+            >
+              {priceRanges.map((range, index) => renderPriceRange({ item: range, index }))}
+            </ScrollView>
           </View>
         </View>
       )}
 
       {/* Products List */}
-      <FlatList
-        data={filteredAndSortedProducts}
-        keyExtractor={(item) => item.id}
-        renderItem={renderProduct}
+      <ProductList
+        filters={getFilters()}
+        layout="list"
+        numColumns={1}
+        showLoadMore={true}
         contentContainerStyle={styles.productsContainer}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No products found</Text>
-            <Text style={styles.emptySubtext}>Try adjusting your search or filters</Text>
-          </View>
-        )}
       />
     </SafeAreaView>
   );
@@ -398,25 +422,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   productsContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  productItem: {
-    marginBottom: 12,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#64748B',
+    flex: 1,
   },
 });
