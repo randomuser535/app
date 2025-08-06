@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -6,37 +6,71 @@ import {
   TouchableOpacity, 
   StyleSheet,
   Alert,
-  Platform
+  Platform,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Heart, Share2, Grid3x3 as Grid3X3, List, Import as SortAsc, ShoppingCart, Trash2 } from 'lucide-react-native';
-import { useApp, Product } from '@/context/AppContext';
+import { useApp } from '@/context/AppContext';
 import ProductCard from '@/components/ProductCard';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { wishlistService, WishlistItem } from '@/services/wishlistService';
+import { cartService } from '@/services/cartService';
 
 export default function WishlistTabScreen() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
+  const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'rating' | 'dateAdded'>('dateAdded');
 
-  const sortedItems = [...state.wishlist].sort((a, b) => {
+  useEffect(() => {
+    loadWishlist();
+  }, []);
+
+  const loadWishlist = async () => {
+    try {
+      setIsLoading(true);
+      const response = await wishlistService.getWishlist();
+      
+      if (response.success && response.data?.wishlist) {
+        setWishlistItems(response.data.wishlist);
+      } else {
+        Alert.alert('Error', response.message);
+      }
+    } catch (error) {
+      console.error('Error loading wishlist:', error);
+      Alert.alert('Error', 'Failed to load wishlist');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadWishlist();
+    setIsRefreshing(false);
+  };
+
+  const sortedItems = [...wishlistItems].sort((a, b) => {
     switch (sortBy) {
       case 'price':
-        return a.price - b.price;
+        return a.product.price - b.product.price;
       case 'rating':
-        return b.rating - a.rating;
+        return b.product.rating - a.product.rating;
       case 'name':
-        return a.name.localeCompare(b.name);
+        return a.product.name.localeCompare(b.product.name);
       case 'dateAdded':
       default:
-        // Since we don't have dateAdded, we'll use the order they were added (reverse)
-        return 0;
+        return new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime();
     }
   });
 
-  const handleAddAllToCart = () => {
-    const inStockItems = sortedItems.filter(item => item.inStock);
+  const handleAddAllToCart = async () => {
+    const inStockItems = sortedItems.filter(item => item.product.inStock);
     if (inStockItems.length === 0) {
       Alert.alert('No Items', 'No items in your wishlist are currently in stock.');
       return;
@@ -49,27 +83,33 @@ export default function WishlistTabScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Add to Cart',
-          onPress: () => {
-            // Add all items to cart
-            inStockItems.forEach(item => {
-              dispatch({ type: 'ADD_TO_CART', payload: item });
-            });
-            
-            // Clear wishlist after successful transfer
-            dispatch({ type: 'CLEAR_WISHLIST' });
-            
-            // Show success message
-            Alert.alert(
-              'Transfer Complete!', 
-              `${inStockItems.length} item${inStockItems.length > 1 ? 's have' : ' has'} been moved from your wishlist to cart.`,
-              [
-                { text: 'Continue Shopping', style: 'cancel' },
-                { 
-                  text: 'View Cart', 
-                  onPress: () => router.push('/(tabs)/cart')
-                },
-              ]
-            );
+          onPress: async () => {
+            try {
+              // Add all items to cart via API
+              const addPromises = inStockItems.map(item => 
+                cartService.moveFromWishlistToCart(item.product.id, 1)
+              );
+              
+              await Promise.all(addPromises);
+              
+              // Refresh wishlist
+              await loadWishlist();
+              
+              // Show success message
+              Alert.alert(
+                'Transfer Complete!', 
+                `${inStockItems.length} item${inStockItems.length > 1 ? 's have' : ' has'} been moved from your wishlist to cart.`,
+                [
+                  { text: 'Continue Shopping', style: 'cancel' },
+                  { 
+                    text: 'View Cart', 
+                    onPress: () => router.push('/(tabs)/cart')
+                  },
+                ]
+              );
+            } catch (error) {
+              Alert.alert('Error', 'Failed to move items to cart');
+            }
           },
         },
       ]
@@ -85,8 +125,18 @@ export default function WishlistTabScreen() {
         {
           text: 'Clear All',
           style: 'destructive',
-          onPress: () => {
-            dispatch({ type: 'CLEAR_WISHLIST' });
+          onPress: async () => {
+            try {
+              const response = await wishlistService.clearWishlist();
+              
+              if (response.success) {
+                setWishlistItems([]);
+              } else {
+                Alert.alert('Error', response.message);
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to clear wishlist');
+            }
           },
         },
       ]
@@ -133,18 +183,22 @@ export default function WishlistTabScreen() {
     }
   };
 
-  const renderWishlistItem = ({ item }: { item: Product }) => (
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  const renderWishlistItem = ({ item }: { item: WishlistItem }) => (
     <View style={viewMode === 'grid' ? styles.gridItem : styles.listItem}>
       <View style={styles.productContainer}>
         <ProductCard 
-          product={item} 
+          product={item.product} 
           layout={viewMode} 
           showWishlistButton={true}
           showShareButton={false}
         />
 
       {/* Stock Status */}
-        {!item.inStock && (
+        {!item.product.inStock && (
           <View style={styles.outOfStockOverlay}>
             <Text style={styles.outOfStockText}>Out of Stock</Text>
           </View>
@@ -158,14 +212,14 @@ export default function WishlistTabScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Wishlist</Text>
-        {state.wishlist.length > 0 && (
+        {wishlistItems.length > 0 && (
           <TouchableOpacity onPress={handleShareWishlist}>
             <Share2 size={24} color="#64748B" />
           </TouchableOpacity>
         )}
       </View>
 
-      {state.wishlist.length === 0 ? (
+      {wishlistItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Heart size={64} color="#CBD5E1" />
           <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
@@ -184,7 +238,7 @@ export default function WishlistTabScreen() {
           <View style={styles.controlsContainer}>
             <View style={styles.leftControls}>
               <Text style={styles.itemCount}>
-                {state.wishlist.length} item{state.wishlist.length !== 1 ? 's' : ''}
+                {wishlistItems.length} item{wishlistItems.length !== 1 ? 's' : ''}
               </Text>
               
               <TouchableOpacity
@@ -237,17 +291,25 @@ export default function WishlistTabScreen() {
             key={viewMode}
             contentContainerStyle={styles.wishlistContainer}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                colors={['#2563EB']}
+                tintColor="#2563EB"
+              />
+            }
             columnWrapperStyle={viewMode === 'grid' ? styles.row : undefined}
           />
 
           {/* Bottom Actions */}
           <View style={styles.bottomActions}>
             <Button
-              title={`Add All to Cart (${sortedItems.filter(item => item.inStock).length})`}
+              title={`Add All to Cart (${sortedItems.filter(item => item.product.inStock).length})`}
               onPress={handleAddAllToCart}
               fullWidth
               size="large"
-              disabled={sortedItems.filter(item => item.inStock).length === 0}
+              disabled={sortedItems.filter(item => item.product.inStock).length === 0}
             />
           </View>
         </>

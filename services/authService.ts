@@ -21,8 +21,6 @@ export interface AuthResponse {
   success: boolean;
   message: string;
   data?: {
-    token: string;
-    refreshToken: string;
     user: User;
   };
   errors?: Array<{
@@ -48,6 +46,7 @@ class AuthService {
   private getHeaders() {
     return {
       'Content-Type': 'application/json',
+      'credentials': 'include', // Include session cookies
     };
   }
 
@@ -56,6 +55,7 @@ class AuthService {
       const response = await fetch(`${API_BASE_URL}/auth/signup`, {
         method: 'POST',
         headers: this.getHeaders(),
+        credentials: 'include',
         body: JSON.stringify(userData),
       });
 
@@ -81,6 +81,7 @@ class AuthService {
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: this.getHeaders(),
+        credentials: 'include',
         body: JSON.stringify(credentials),
       });
 
@@ -102,6 +103,13 @@ class AuthService {
 
   async logout(): Promise<void> {
     try {
+      // Call logout endpoint to destroy session
+      await fetch(`${API_BASE_URL}/auth/logout`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        credentials: 'include',
+      });
+      
       await AsyncStorage.removeItem('user');
     } catch (error) {
       console.error('Logout error:', error);
@@ -120,10 +128,63 @@ class AuthService {
 
   async isAuthenticated(): Promise<boolean> {
     try {
-      const user = await this.getCurrentUser();
-      return !!user;
+      // Check with server if session is still valid
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+        credentials: 'include',
+      });
+      
+      const data = await response.json();
+      return data.success && !!data.data?.user;
     } catch (error) {
+      console.error('Check authentication error:', error);
       return false;
+    }
+  }
+
+  async updateProfile(updateData: { name?: string; phone?: string }): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(updateData),
+      });
+
+      const data: AuthResponse = await response.json();
+
+      if (data.success && data.data) {
+        await AsyncStorage.setItem('user', JSON.stringify(data.data.user));
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Update profile error:', error);
+      return {
+        success: false,
+        message: 'Network error. Please check your connection and try again.',
+      };
+    }
+  }
+
+  async changePassword(passwordData: { currentPassword: string; newPassword: string }): Promise<AuthResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'PUT',
+        headers: this.getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify(passwordData),
+      });
+
+      const data: AuthResponse = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Change password error:', error);
+      return {
+        success: false,
+        message: 'Network error. Please check your connection and try again.',
+      };
     }
   }
 }

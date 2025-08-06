@@ -2,57 +2,25 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
 const { validationResult } = require('express-validator');
+const { createSession, destroySession } = require('../middleware/session');
 
 /**
- * Generate JWT token for user
+ * Send session response (replaces JWT token response)
  */
-const generateToken = (userId) => {
-  return jwt.sign(
-    { userId },
-    process.env.JWT_SECRET,
-    { 
-      expiresIn: '7d',        // Token expiration
-      issuer: 'onetech-api',  // Token issuer
-      audience: 'onetech-app' // Token audience
-    }
-  );
-};
-
-/**
- * Generate refresh token
- */
-const generateRefreshToken = () => {
-  return crypto.randomBytes(40).toString('hex');
-};
-
-/**
- * Send token response
- */
-const sendTokenResponse = (user, statusCode, res, message = 'Success') => {
-  // Generate tokens
-  const token = generateToken(user._id);
-  const refreshToken = generateRefreshToken();
-
-  // Cookie options
-  const cookieOptions = {
-    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict'
-  };
-
+const sendSessionResponse = async (req, user, statusCode, res, message = 'Success') => {
+  try {
+    // Create session instead of JWT token
+    await createSession(req, user);
+    
   // Remove password from output
   user.password = undefined;
 
   res
     .status(statusCode)
-    .cookie('token', token, cookieOptions)
     .json({
       success: true,
       message,
       data: {
-        token,
-        refreshToken,
         user: {
           id: user._id,
           name: user.name,
@@ -64,6 +32,13 @@ const sendTokenResponse = (user, statusCode, res, message = 'Success') => {
         }
       }
     });
+  } catch (error) {
+    console.error('Session creation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating user session'
+    });
+  }
 };
 
 /**
@@ -115,7 +90,7 @@ const signup = async (req, res) => {
     await user.save();
 
     // Send token response
-    sendTokenResponse(user, 201, res, 'User registered successfully');
+    await sendSessionResponse(req, user, 201, res, 'User registered successfully');
 
   } catch (error) {
     console.error('Signup error:', error);
@@ -168,7 +143,7 @@ const login = async (req, res) => {
     const user = await User.findByCredentials(email, password);
 
     // Send token response
-    sendTokenResponse(user, 200, res, 'Login successful');
+    await sendSessionResponse(req, user, 200, res, 'Login successful');
 
   } catch (error) {
     console.error('Login error:', error);
@@ -196,11 +171,8 @@ const login = async (req, res) => {
  */
 const logout = async (req, res) => {
   try {
-    // Clear cookie
-    res.cookie('token', 'none', {
-      expires: new Date(Date.now() + 10 * 1000),
-      httpOnly: true
-    });
+    // Destroy session
+    await destroySession(req);
 
     res.status(200).json({
       success: true,
@@ -218,19 +190,19 @@ const logout = async (req, res) => {
 /**
  * @desc    Get current logged in user
  * @route   GET /api/auth/me
- * @access  Public (simplified for demo)
+ * @access  Private (Session-based)
  */
 const getMe = async (req, res) => {
   try {
-    // For simple project, return empty user if no authentication
-    if (!req.user?.id) {
+    // Check if user is authenticated via session
+    if (!req.session || !req.session.userId) {
       return res.status(200).json({
         success: false,
         message: 'No user logged in'
       });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.session.userId);
 
     if (!user) {
       return res.status(404).json({
@@ -267,15 +239,15 @@ const getMe = async (req, res) => {
 /**
  * @desc    Update user profile
  * @route   PUT /api/auth/profile
- * @access  Public (simplified for demo)
+ * @access  Private (Session-based)
  */
 const updateProfile = async (req, res) => {
   try {
-    // For simple project, require user ID in request body
-    if (!req.user?.id && !req.body.userId) {
+    // Check session authentication
+    if (!req.session || !req.session.userId) {
       return res.status(400).json({
         success: false,
-        message: 'User ID required'
+        message: 'Authentication required'
       });
     }
 
@@ -289,7 +261,7 @@ const updateProfile = async (req, res) => {
     }
 
     const { name, phone, userId } = req.body;
-    const targetUserId = req.user?.id || userId;
+    const targetUserId = req.session.userId;
     
     const user = await User.findByIdAndUpdate(
       targetUserId,
@@ -323,15 +295,15 @@ const updateProfile = async (req, res) => {
 /**
  * @desc    Change password
  * @route   PUT /api/auth/change-password
- * @access  Public (simplified for demo)
+ * @access  Private (Session-based)
  */
 const changePassword = async (req, res) => {
   try {
-    // For simple project, require user ID in request body
-    if (!req.user?.id && !req.body.userId) {
+    // Check session authentication
+    if (!req.session || !req.session.userId) {
       return res.status(400).json({
         success: false,
-        message: 'User ID required'
+        message: 'Authentication required'
       });
     }
 
@@ -345,7 +317,7 @@ const changePassword = async (req, res) => {
     }
 
     const { currentPassword, newPassword, userId } = req.body;
-    const targetUserId = req.user?.id || userId;
+    const targetUserId = req.session.userId;
 
     // Get user with password
     const user = await User.findById(targetUserId).select('+password');

@@ -37,13 +37,6 @@ const menuItems = [
     description: 'Your saved items'
   },
   {
-    id: 'notifications',
-    title: 'Notifications',
-    icon: Bell,
-    screen: '/notifications',
-    description: 'Manage notifications'
-  },
-  {
     id: 'settings',
     title: 'Settings',
     icon: Settings,

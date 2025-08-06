@@ -3,6 +3,8 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, Platform } from
 import { router } from 'expo-router';
 import { ShoppingCart, Star, Heart, Share } from 'lucide-react-native';
 import { Product, useApp, isInWishlist } from '@/context/AppContext';
+import WishlistButton from '@/components/WishlistButton';
+import CartButton from '@/components/CartButton';
 
 interface ProductCardProps {
   product: Product;
@@ -22,24 +24,9 @@ export default function ProductCard({
   const { state, dispatch } = useApp();
   const inWishlist = isInWishlist(state.wishlist, product.id);
 
-  const handleAddToCart = (e?: any) => {
-    e?.stopPropagation();
-    if (!product.inStock) return;
-    
-    dispatch({ type: 'ADD_TO_CART', payload: product });
-    Alert.alert('Success', 'Product added to cart!');
-  };
-
-  const handleWishlistToggle = (e?: any) => {
-    e?.stopPropagation();
-    
-    if (inWishlist) {
-      dispatch({ type: 'REMOVE_FROM_WISHLIST', payload: product.id });
-      Alert.alert('Removed', 'Product removed from wishlist');
-    } else {
-      dispatch({ type: 'ADD_TO_WISHLIST', payload: product });
-      Alert.alert('Added', 'Product added to wishlist!');
-    }
+  const handleCartSuccess = () => {
+    // Optionally update local state or trigger refresh
+    // The CartButton component handles the API call and user feedback
   };
 
   const handleShare = async (e?: any) => {
@@ -113,16 +100,11 @@ export default function ProductCard({
             <Text style={styles.price}>${product.price}</Text>
             <View style={styles.actionButtons}>
               {showWishlistButton && (
-                <TouchableOpacity 
-                  style={[styles.iconButton, styles.wishlistButton]} 
-                  onPress={handleWishlistToggle}
-                >
-                  <Heart 
-                    size={16} 
-                    color={inWishlist ? "#EF4444" : "#64748B"} 
-                    fill={inWishlist ? "#EF4444" : "none"}
-                  />
-                </TouchableOpacity>
+                <WishlistButton 
+                  product={product}
+                  size={16}
+                  style={[styles.iconButton, styles.wishlistButton]}
+                />
               )}
               {showShareButton && (
                 <TouchableOpacity 
@@ -132,13 +114,11 @@ export default function ProductCard({
                   <Share size={16} color="#64748B" />
                 </TouchableOpacity>
               )}
-              <TouchableOpacity 
-                style={[styles.addButton, !product.inStock && styles.disabledButton]} 
-                onPress={handleAddToCart}
-                disabled={!product.inStock}
-              >
-                <ShoppingCart size={16} color="#FFFFFF" />
-              </TouchableOpacity>
+              <CartButton
+                product={product}
+                size={16}
+                onAddToCart={handleCartSuccess}
+              />
             </View>
           </View>
         </View>
@@ -162,16 +142,11 @@ export default function ProductCard({
         {/* Floating Action Buttons */}
         <View style={styles.floatingActions}>
           {showWishlistButton && (
-            <TouchableOpacity 
-              style={[styles.floatingButton, inWishlist && styles.activeWishlist]} 
-              onPress={handleWishlistToggle}
-            >
-              <Heart 
-                size={16} 
-                color={inWishlist ? "#FFFFFF" : "#64748B"} 
-                fill={inWishlist ? "#FFFFFF" : "none"}
-              />
-            </TouchableOpacity>
+            <WishlistButton 
+              product={product}
+              size={16}
+              style={styles.floatingButton}
+            />
           )}
           {showShareButton && (
             <TouchableOpacity 
@@ -194,13 +169,11 @@ export default function ProductCard({
         </View>
         <View style={styles.gridActions}>
           <Text style={styles.price}>${product.price}</Text>
-          <TouchableOpacity 
-            style={[styles.addButton, !product.inStock && styles.disabledButton]} 
-            onPress={handleAddToCart}
-            disabled={!product.inStock}
-          >
-            <ShoppingCart size={16} color="#FFFFFF" />
-          </TouchableOpacity>
+          <CartButton
+            product={product}
+            size={16}
+            onAddToCart={handleCartSuccess}
+          />
         </View>
       </View>
     </TouchableOpacity>

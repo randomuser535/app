@@ -60,10 +60,6 @@ export default function HomeScreen() {
     setIsRefreshing(false);
   };
 
-  const handleNotificationPress = () => {
-    router.push('/notifications');
-  };
-
   // Header component for the FlatList
   const renderHeader = () => (
     <>
@@ -73,9 +69,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>One Tech</Text>
           <Text style={styles.title}>Find your perfect product</Text>
         </View>
-        <TouchableOpacity style={styles.notificationButton} onPress={handleNotificationPress}>
-          <Bell size={24} color="#64748B" />
-        </TouchableOpacity>
+  
       </View>
 
       {/* Search Bar */}
@@ -159,14 +153,6 @@ export default function HomeScreen() {
         onProductPress={(productId) => router.push(`/product/${productId}`)}
         contentContainerStyle={styles.productsContainer}
         ListHeaderComponent={renderHeader}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            colors={['#2563EB']}
-            tintColor="#2563EB"
-          />
-        }
       />
     </SafeAreaView>
   );
@@ -195,19 +181,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#64748B',
     marginTop: 4,
-  },
-  notificationButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
   },
   searchContainer: {
     paddingHorizontal: 20,

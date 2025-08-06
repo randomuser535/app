@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -6,26 +6,84 @@ import {
   Image, 
   TouchableOpacity, 
   StyleSheet,
-  Alert
+  Alert,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Minus, Plus, Trash2, ShoppingBag } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useApp, getCartTotal, CartItem } from '@/context/AppContext';
+import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { cartService, CartItem, CartSummary } from '@/services/cartService';
 
 export default function CartScreen() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartSummary, setCartSummary] = useState<CartSummary | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
 
-  const handleUpdateQuantity = (id: string, quantity: number) => {
-    if (quantity <= 0) {
-      handleRemoveItem(id);
-    } else {
-      dispatch({ type: 'UPDATE_CART_QUANTITY', payload: { id, quantity } });
+  useEffect(() => {
+    loadCart();
+  }, []);
+
+  const loadCart = async () => {
+    try {
+      setIsLoading(true);
+      const response = await cartService.getCart();
+      
+      if (response.success && response.data) {
+        setCartItems(response.data.cart || []);
+        setCartSummary(response.data.summary || null);
+      } else {
+        Alert.alert('Error', response.message);
+      }
+    } catch (error) {
+      console.error('Error loading cart:', error);
+      Alert.alert('Error', 'Failed to load cart');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleRemoveItem = (id: string) => {
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadCart();
+    setIsRefreshing(false);
+  };
+
+  const handleUpdateQuantity = async (productId: string, quantity: number) => {
+    if (updatingItems.has(productId)) return;
+
+    setUpdatingItems(prev => new Set(prev).add(productId));
+
+    try {
+    if (quantity <= 0) {
+        await handleRemoveItem(productId);
+    } else {
+        const response = await cartService.updateCartItem(productId, quantity);
+        
+        if (response.success) {
+          await loadCart(); // Refresh cart data
+        } else {
+          Alert.alert('Error', response.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      Alert.alert('Error', 'Failed to update quantity');
+    } finally {
+      setUpdatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(productId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRemoveItem = async (productId: string) => {
     Alert.alert(
       'Remove Item',
       'Are you sure you want to remove this item from your cart?',
@@ -34,7 +92,20 @@ export default function CartScreen() {
         { 
           text: 'Remove', 
           style: 'destructive',
-          onPress: () => dispatch({ type: 'REMOVE_FROM_CART', payload: id })
+          onPress: async () => {
+            try {
+              const response = await cartService.removeFromCart(productId);
+              
+              if (response.success) {
+                await loadCart(); // Refresh cart data
+              } else {
+                Alert.alert('Error', response.message);
+              }
+            } catch (error) {
+              console.error('Error removing item:', error);
+              Alert.alert('Error', 'Failed to remove item');
+            }
+          }
         },
       ]
     );
@@ -60,47 +131,53 @@ export default function CartScreen() {
 
   const renderCartItem = ({ item }: { item: CartItem }) => (
     <View style={styles.cartItem}>
-      <Image source={{ uri: item.image }} style={styles.itemImage} />
+      <Image source={{ uri: item.product.image }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
-        <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-        <Text style={styles.itemBrand}>{item.brand}</Text>
-        <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+        <Text style={styles.itemName} numberOfLines={2}>{item.product.name}</Text>
+        <Text style={styles.itemBrand}>{item.product.brand}</Text>
+        <Text style={styles.itemPrice}>${item.product.price.toFixed(2)}</Text>
+        {item.priceAtAdd !== item.product.price && (
+          <Text style={styles.priceChange}>
+            Was ${item.priceAtAdd.toFixed(2)}
+          </Text>
+        )}
       </View>
       <View style={styles.itemActions}>
         <TouchableOpacity 
           style={styles.removeButton}
-          onPress={() => handleRemoveItem(item.id)}
+          onPress={() => handleRemoveItem(item.product.id)}
         >
           <Trash2 size={18} color="#EF4444" />
         </TouchableOpacity>
         <View style={styles.quantityControls}>
           <TouchableOpacity
-            style={styles.quantityButton}
-            onPress={() => handleUpdateQuantity(item.id, item.quantity - 1)}
+            style={[styles.quantityButton, updatingItems.has(item.product.id) && styles.disabledButton]}
+            onPress={() => handleUpdateQuantity(item.product.id, item.quantity - 1)}
+            disabled={updatingItems.has(item.product.id)}
           >
             <Minus size={16} color="#64748B" />
           </TouchableOpacity>
           <Text style={styles.quantity}>{item.quantity}</Text>
           <TouchableOpacity
-            style={styles.quantityButton}
-            onPress={() => handleUpdateQuantity(item.id, item.quantity + 1)}
+            style={[styles.quantityButton, updatingItems.has(item.product.id) && styles.disabledButton]}
+            onPress={() => handleUpdateQuantity(item.product.id, item.quantity + 1)}
+            disabled={updatingItems.has(item.product.id)}
           >
             <Plus size={16} color="#64748B" />
           </TouchableOpacity>
         </View>
         <Text style={styles.itemTotal}>
-          ${(item.price * item.quantity).toFixed(2)}
+          ${item.totalPrice.toFixed(2)}
         </Text>
       </View>
     </View>
   );
 
-  const cartTotal = getCartTotal(state.cart);
-  const tax = cartTotal * 0.08; // 8% tax
-  const shipping = cartTotal > 100 ? 0 : 9.99; // Free shipping over $100
-  const finalTotal = cartTotal + tax + shipping;
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
 
-  if (state.cart.length === 0) {
+  if (cartItems.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -127,51 +204,61 @@ export default function CartScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Shopping Cart</Text>
         <Text style={styles.itemCount}>
-          {state.cart.length} {state.cart.length === 1 ? 'item' : 'items'}
+          {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
         </Text>
       </View>
 
       <FlatList
-        data={state.cart}
+        data={cartItems}
         keyExtractor={(item) => item.id}
         renderItem={renderCartItem}
         contentContainerStyle={styles.cartList}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={['#2563EB']}
+            tintColor="#2563EB"
+          />
+        }
       />
 
       {/* Cart Summary */}
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Subtotal</Text>
-          <Text style={styles.summaryValue}>${cartTotal.toFixed(2)}</Text>
+      {cartSummary && (
+        <View style={styles.summaryContainer}>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Subtotal</Text>
+            <Text style={styles.summaryValue}>${cartSummary.subtotal.toFixed(2)}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Tax</Text>
+            <Text style={styles.summaryValue}>${cartSummary.tax.toFixed(2)}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Shipping</Text>
+            <Text style={styles.summaryValue}>
+              {cartSummary.shipping === 0 ? 'Free' : `$${cartSummary.shipping.toFixed(2)}`}
+            </Text>
+          </View>
+          {cartSummary.shipping === 0 && cartSummary.subtotal > 0 && (
+            <Text style={styles.freeShippingNote}>
+              🎉 You qualified for free shipping!
+            </Text>
+          )}
+          <View style={[styles.summaryRow, styles.totalRow]}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>${cartSummary.total.toFixed(2)}</Text>
+          </View>
+          
+          <Button
+            title="Proceed to Checkout"
+            onPress={handleCheckout}
+            fullWidth
+            size="large"
+          />
         </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Tax</Text>
-          <Text style={styles.summaryValue}>${tax.toFixed(2)}</Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Shipping</Text>
-          <Text style={styles.summaryValue}>
-            {shipping === 0 ? 'Free' : `$${shipping.toFixed(2)}`}
-          </Text>
-        </View>
-        {shipping === 0 && cartTotal > 0 && (
-          <Text style={styles.freeShippingNote}>
-            🎉 You qualified for free shipping!
-          </Text>
-        )}
-        <View style={[styles.summaryRow, styles.totalRow]}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>${finalTotal.toFixed(2)}</Text>
-        </View>
-        
-        <Button
-          title="Proceed to Checkout"
-          onPress={handleCheckout}
-          fullWidth
-          size="large"
-        />
-      </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -266,6 +353,15 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     minWidth: 20,
     textAlign: 'center',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  priceChange: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#F59E0B',
+    textDecorationLine: 'line-through',
   },
   itemTotal: {
     fontSize: 16,

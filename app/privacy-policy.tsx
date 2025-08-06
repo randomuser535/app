@@ -57,7 +57,6 @@ export default function PrivacyPolicyScreen() {
             We use the information we collect to:
             {'\n\n'}• Provide and improve our services
             {'\n'}• Process transactions and fulfill orders
-            {'\n'}• Send you important updates and notifications
             {'\n'}• Provide customer support
             {'\n'}• Personalize your shopping experience
             {'\n'}• Analyze usage patterns to improve our app

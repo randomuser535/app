@@ -34,43 +34,7 @@ interface SettingItem {
 }
 
 export default function SettingsScreen() {
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-
   const settingSections = [
-    {
-      title: 'Notifications',
-      items: [
-        {
-          id: 'push-notifications',
-          title: 'Push Notifications',
-          subtitle: 'Receive notifications on your device',
-          icon: Smartphone,
-          type: 'toggle' as const,
-          value: pushNotifications,
-          onToggle: setPushNotifications,
-        },
-        {
-          id: 'email-notifications',
-          title: 'Email Notifications',
-          subtitle: 'Receive updates via email',
-          icon: Mail,
-          type: 'toggle' as const,
-          value: emailNotifications,
-          onToggle: setEmailNotifications,
-        },
-        {
-          id: 'sound',
-          title: 'Sound',
-          subtitle: 'Play sounds for notifications',
-          icon: Volume2,
-          type: 'toggle' as const,
-          value: soundEnabled,
-          onToggle: setSoundEnabled,
-        },
-      ],
-    },
     {
       title: 'Appearance',
       items: [

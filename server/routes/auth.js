@@ -9,6 +9,7 @@ const {
   changePassword,
   promoteToAdmin
 } = require('../controllers/authController');
+const { requireAuth } = require('../middleware/session');
 
 const router = express.Router();
 
@@ -93,12 +94,14 @@ const changePasswordValidation = [
     })
 ];
 
-// All routes are now public (no authentication required)
+// Public routes
 router.post('/signup', signupValidation, signup);
 router.post('/login', loginValidation, login);
-router.post('/logout', logout);
-router.get('/me', getMe);
-router.put('/profile', profileUpdateValidation, updateProfile);
-router.put('/change-password', changePasswordValidation, changePassword);
+
+// Protected routes (require session authentication)
+router.post('/logout', requireAuth, logout);
+router.get('/me', getMe); // Can work with or without auth
+router.put('/profile', requireAuth, profileUpdateValidation, updateProfile);
+router.put('/change-password', requireAuth, changePasswordValidation, changePassword);
 
 module.exports = router;

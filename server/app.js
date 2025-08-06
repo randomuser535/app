@@ -3,15 +3,20 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
 require('dotenv').config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
 const addressRoutes = require('./routes/addresses');
 const productRoutes = require('./routes/products');
+const wishlistRoutes = require('./routes/wishlist');
+const cartRoutes = require('./routes/cart');
 
 // Import database connection
 const database = require('./config/database');
+const { sessionConfig } = require('./middleware/session');
 
 const app = express();
 
@@ -74,6 +79,12 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 /**
+ * Session Configuration
+ * Using MongoDB to store sessions instead of JWT tokens
+ */
+app.use(session(sessionConfig));
+
+/**
  * Logging Middleware
  */
 app.use((req, res, next) => {
@@ -87,6 +98,8 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/cart', cartRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

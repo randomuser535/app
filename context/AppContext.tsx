@@ -254,7 +254,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Then try to get fresh user data from API if authenticated
-      if (authService.isAuthenticated()) {
+      if (await authService.isAuthenticated()) {
         const currentUser = await authService.getCurrentUser();
         if (currentUser) {
           dispatch({ type: 'SET_USER', payload: currentUser });

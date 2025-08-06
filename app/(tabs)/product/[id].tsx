@@ -17,6 +17,8 @@ import { useApp, isInWishlist } from '@/context/AppContext';
 import { useProduct } from '@/hooks/useProduct';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import WishlistButton from '@/components/WishlistButton';
+import CartButton from '@/components/CartButton';
 
 const { width } = Dimensions.get('window');
 
@@ -63,10 +65,7 @@ export default function ProductDetailScreen() {
     );
   }
 
-  const handleAddToCart = () => {
-    for (let i = 0; i < quantity; i++) {
-      dispatch({ type: 'ADD_TO_CART', payload: product });
-    }
+  const handleCartSuccess = () => {
     Alert.alert(
       'Added to Cart',
       `${quantity} ${product.name}${quantity > 1 ? 's' : ''} added to cart!`,
@@ -78,16 +77,6 @@ export default function ProductDetailScreen() {
         },
       ]
     );
-  };
-
-  const handleWishlistToggle = () => {
-    if (inWishlist) {
-      dispatch({ type: 'REMOVE_FROM_WISHLIST', payload: product.id });
-      Alert.alert('Removed', 'Product removed from wishlist');
-    } else {
-      dispatch({ type: 'ADD_TO_WISHLIST', payload: product });
-      Alert.alert('Added', 'Product added to wishlist!');
-    }
   };
 
   const handleShare = async () => {
@@ -140,16 +129,11 @@ export default function ProductDetailScreen() {
           <ArrowLeft size={24} color="#1E293B" />
         </TouchableOpacity>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            style={[styles.headerButton, inWishlist && styles.activeWishlistButton]} 
-            onPress={handleWishlistToggle}
-          >
-            <Heart 
-              size={24} 
-              color={inWishlist ? "#FFFFFF" : "#64748B"} 
-              fill={inWishlist ? "#FFFFFF" : "none"}
-            />
-          </TouchableOpacity>
+          <WishlistButton 
+            product={product}
+            size={24}
+            style={styles.headerButton}
+          />
           <TouchableOpacity style={styles.headerButton} onPress={handleShare}>
             <Share size={24} color="#64748B" />
           </TouchableOpacity>
@@ -278,12 +262,11 @@ export default function ProductDetailScreen() {
           </View>
         </View>
         
-        <Button
-          title={`Add to Cart • $${(product.price * quantity).toFixed(2)}`}
-          onPress={handleAddToCart}
-          disabled={!product.inStock}
-          fullWidth={false}
-          size="small"
+        <CartButton
+          product={product}
+          showQuantity={true}
+          onAddToCart={handleCartSuccess}
+          style={styles.cartButton}
         />
       </View>
     </SafeAreaView>
@@ -311,9 +294,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  activeWishlistButton: {
-    backgroundColor: '#EF4444',
   },
   headerActions: {
     flexDirection: 'row',
@@ -547,6 +527,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     minWidth: 20,
     textAlign: 'center',
+  },
+  cartButton: {
+    flex: 1,
   },
   errorContainer: {
     flex: 1,
