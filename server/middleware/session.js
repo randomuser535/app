@@ -115,5 +115,5 @@ module.exports = {
   optionalAuth,
   createSession,
   destroySession,
-  isAuthenticated
+  isAuthenticated,
 };

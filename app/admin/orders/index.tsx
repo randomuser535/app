@@ -6,81 +6,94 @@ import {
   TouchableOpacity, 
   StyleSheet,
   TextInput,
-  Alert
+  Alert,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { ArrowLeft, Search, Filter, Package, Truck, CircleCheck as CheckCircle, Circle as XCircle, Clock } from 'lucide-react-native';
-
-interface Order {
-  id: string;
-  customerName: string;
-  customerEmail: string;
-  date: string;
-  status: 'new' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  total: number;
-  itemCount: number;
-}
-
-const mockOrders: Order[] = [
-  {
-    id: 'ORD-001',
-    customerName: 'John Doe',
-    customerEmail: 'john@example.com',
-    date: '2024-01-15',
-    status: 'new',
-    total: 1299.99,
-    itemCount: 2,
-  },
-  {
-    id: 'ORD-002',
-    customerName: 'Sarah Johnson',
-    customerEmail: 'sarah@example.com',
-    date: '2024-01-14',
-    status: 'processing',
-    total: 849.99,
-    itemCount: 1,
-  },
-  {
-    id: 'ORD-003',
-    customerName: 'Mike Chen',
-    customerEmail: 'mike@example.com',
-    date: '2024-01-13',
-    status: 'shipped',
-    total: 2299.99,
-    itemCount: 3,
-  },
-  {
-    id: 'ORD-004',
-    customerName: 'Emily Davis',
-    customerEmail: 'emily@example.com',
-    date: '2024-01-12',
-    status: 'delivered',
-    total: 449.99,
-    itemCount: 1,
-  },
-];
+import { ArrowLeft, Search, Filter, Package, Truck, CircleCheck as CheckCircle, Circle as XCircle, Clock, Calendar, DollarSign } from 'lucide-react-native';
+import { orderService, Order, OrderFilters } from '@/services/orderService';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import Button from '@/components/Button';
 
 export default function AdminOrdersScreen() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [orderStats, setOrderStats] = useState<any>(null);
 
-  const statusOptions = ['All', 'new', 'processing', 'shipped', 'delivered', 'cancelled'];
+  const statusOptions = ['all', 'pending', 'processing', 'shipped', 'delivered', 'cancelled'];
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         order.customerEmail.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = selectedStatus === 'All' || order.status === selectedStatus;
-    return matchesSearch && matchesStatus;
-  });
+  React.useEffect(() => {
+    loadOrders();
+    loadOrderStats();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      setIsLoading(true);
+      const filters: OrderFilters = {
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+        limit: 50
+      };
+      
+      if (selectedStatus !== 'all') {
+        filters.status = selectedStatus;
+      }
+      
+      if (searchQuery.trim()) {
+        filters.search = searchQuery.trim();
+      }
+      
+      const response = await orderService.getOrders(filters);
+      
+      if (response.success && response.data?.orders) {
+        setOrders(response.data.orders);
+      } else {
+        Alert.alert('Error', response.message);
+      }
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      Alert.alert('Error', 'Failed to load orders');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadOrderStats = async () => {
+    try {
+      const response = await orderService.getOrderStats();
+      if (response.success && response.data) {
+        setOrderStats(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading order stats:', error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadOrders();
+    await loadOrderStats();
+    setIsRefreshing(false);
+  };
+
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadOrders();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, selectedStatus]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'new':
+      case 'pending':
         return <Clock size={16} color="#F59E0B" />;
       case 'processing':
         return <Package size={16} color="#2563EB" />;
@@ -97,7 +110,7 @@ export default function AdminOrdersScreen() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'new':
+      case 'pending':
         return '#F59E0B';
       case 'processing':
         return '#2563EB';
@@ -112,7 +125,7 @@ export default function AdminOrdersScreen() {
     }
   };
 
-  const handleStatusUpdate = (orderId: string, newStatus: Order['status']) => {
+  const handleStatusUpdate = async (orderId: string, newStatus: Order['status']) => {
     setOrders(prev => 
       prev.map(order => 
         order.id === orderId ? { ...order, status: newStatus } : order
@@ -121,7 +134,21 @@ export default function AdminOrdersScreen() {
     Alert.alert('Success', `Order ${orderId} status updated to ${newStatus}`);
   };
 
-  const handleBulkStatusUpdate = (newStatus: Order['status']) => {
+  const handleQuickStatusUpdate = async (orderId: string, newStatus: Order['status']) => {
+    try {
+      const response = await orderService.updateOrderStatus(orderId, newStatus);
+      if (response.success) {
+        await loadOrders(); // Refresh orders
+        Alert.alert('Success', `Order status updated to ${newStatus}`);
+      } else {
+        Alert.alert('Error', response.message);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update order status');
+    }
+  };
+
+  const handleBulkStatusUpdate = async (newStatus: Order['status']) => {
     if (selectedOrders.length === 0) return;
 
     Alert.alert(
@@ -132,13 +159,19 @@ export default function AdminOrdersScreen() {
         {
           text: 'Update',
           onPress: () => {
-            setOrders(prev => 
-              prev.map(order => 
-                selectedOrders.includes(order.id) ? { ...order, status: newStatus } : order
-              )
-            );
-            setSelectedOrders([]);
-            Alert.alert('Success', 'Orders updated successfully');
+            orderService.bulkUpdateStatus(selectedOrders, newStatus)
+              .then(response => {
+                if (response.success) {
+                  setSelectedOrders([]);
+                  loadOrders(); // Refresh orders
+                  Alert.alert('Success', 'Orders updated successfully');
+                } else {
+                  Alert.alert('Error', response.message);
+                }
+              })
+              .catch(error => {
+                Alert.alert('Error', 'Failed to update orders');
+              });
           },
         },
       ]
@@ -175,7 +208,7 @@ export default function AdminOrdersScreen() {
         </TouchableOpacity>
         
         <View style={styles.orderInfo}>
-          <Text style={styles.orderId}>{item.id}</Text>
+          <Text style={styles.orderId}>{item.orderNumber}</Text>
           <Text style={styles.orderDate}>
             {new Date(item.date).toLocaleDateString()}
           </Text>
@@ -191,17 +224,63 @@ export default function AdminOrdersScreen() {
 
       <View style={styles.orderContent}>
         <View style={styles.customerInfo}>
-          <Text style={styles.customerName}>{item.customerName}</Text>
-          <Text style={styles.customerEmail}>{item.customerEmail}</Text>
+          <Text style={styles.customerName}>{item.customerInfo.name}</Text>
+          <Text style={styles.customerEmail}>{item.customerInfo.email}</Text>
         </View>
         
         <View style={styles.orderMeta}>
-          <Text style={styles.itemCount}>{item.itemCount} item{item.itemCount > 1 ? 's' : ''}</Text>
-          <Text style={styles.orderTotal}>${item.total.toFixed(2)}</Text>
+          <Text style={styles.itemCount}>{item.items.length} item{item.items.length > 1 ? 's' : ''}</Text>
+          <Text style={styles.orderTotal}>${item.pricing.total.toFixed(2)}</Text>
         </View>
+      </View>
+      
+      {/* Quick Actions */}
+      <View style={styles.quickActions}>
+        {item.status === 'pending' && (
+          <TouchableOpacity
+            style={[styles.quickActionButton, { backgroundColor: '#2563EB20' }]}
+            onPress={() => handleQuickStatusUpdate(item.id, 'processing')}
+          >
+            <Package size={14} color="#2563EB" />
+          </TouchableOpacity>
+        )}
+        {item.status === 'processing' && (
+          <TouchableOpacity
+            style={[styles.quickActionButton, { backgroundColor: '#8B5CF620' }]}
+            onPress={() => handleQuickStatusUpdate(item.id, 'shipped')}
+          >
+            <Truck size={14} color="#8B5CF6" />
+          </TouchableOpacity>
+        )}
+        {item.status === 'shipped' && (
+          <TouchableOpacity
+            style={[styles.quickActionButton, { backgroundColor: '#10B98120' }]}
+            onPress={() => handleQuickStatusUpdate(item.id, 'delivered')}
+          >
+            <CheckCircle size={14} color="#10B981" />
+          </TouchableOpacity>
+        )}
       </View>
     </TouchableOpacity>
   );
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => router.back()}
+          >
+            <ArrowLeft size={24} color="#1E293B" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Orders</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -216,6 +295,29 @@ export default function AdminOrdersScreen() {
         <Text style={styles.title}>Orders</Text>
         <View style={styles.placeholder} />
       </View>
+
+      {/* Order Statistics */}
+      {orderStats && (
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Package size={20} color="#2563EB" />
+            <Text style={styles.statNumber}>{orderStats.overview?.totalOrders || 0}</Text>
+            <Text style={styles.statLabel}>Total Orders</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Calendar size={20} color="#10B981" />
+            <Text style={styles.statNumber}>{orderStats.overview?.recentOrders || 0}</Text>
+            <Text style={styles.statLabel}>This Month</Text>
+          </View>
+          <View style={styles.statCard}>
+            <DollarSign size={20} color="#F59E0B" />
+            <Text style={styles.statNumber}>
+              ${(orderStats.overview?.totalRevenue || 0).toFixed(0)}
+            </Text>
+            <Text style={styles.statLabel}>Revenue</Text>
+          </View>
+        </View>
+      )}
 
       {/* Search and Filters */}
       <View style={styles.searchContainer}>
@@ -257,7 +359,7 @@ export default function AdminOrdersScreen() {
                   styles.statusChipText,
                   selectedStatus === item && styles.activeStatusChipText
                 ]}>
-                  {item === 'All' ? 'All' : item.charAt(0).toUpperCase() + item.slice(1)}
+                  {item === 'all' ? 'All' : item.charAt(0).toUpperCase() + item.slice(1)}
                 </Text>
               </TouchableOpacity>
             )}
@@ -296,27 +398,76 @@ export default function AdminOrdersScreen() {
       )}
 
       {/* Orders List */}
-      <FlatList
-        data={filteredOrders}
-        keyExtractor={(item) => item.id}
-        renderItem={renderOrderItem}
-        contentContainerStyle={styles.ordersList}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <Package size={64} color="#CBD5E1" />
-            <Text style={styles.emptyText}>No orders found</Text>
-            <Text style={styles.emptySubtext}>
-              {searchQuery ? 'Try adjusting your search' : 'Orders will appear here when customers make purchases'}
-            </Text>
-          </View>
-        )}
-      />
+      {orders.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Package size={64} color="#CBD5E1" />
+          <Text style={styles.emptyTitle}>No orders found</Text>
+          <Text style={styles.emptySubtext}>
+            {searchQuery ? 'Try adjusting your search' : 'Orders will appear here when customers make purchases'}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.id}
+          renderItem={renderOrderItem}
+          contentContainerStyle={styles.ordersList}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={['#2563EB']}
+              tintColor="#2563EB"
+            />
+          }
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Package size={64} color="#CBD5E1" />
+              <Text style={styles.emptyText}>No orders found</Text>
+              <Text style={styles.emptySubtext}>
+                {searchQuery ? 'Try adjusting your search' : 'Orders will appear here when customers make purchases'}
+              </Text>
+            </View>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  statsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statNumber: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#1E293B',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    textAlign: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
@@ -542,6 +693,18 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     color: '#2563EB',
   },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  quickActionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   orderActions: {
     alignItems: 'flex-end',
   },
@@ -551,6 +714,13 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: 60,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
   },
   emptyText: {
     fontSize: 18,

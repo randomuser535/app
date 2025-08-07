@@ -13,6 +13,7 @@ const addressRoutes = require('./routes/addresses');
 const productRoutes = require('./routes/products');
 const wishlistRoutes = require('./routes/wishlist');
 const cartRoutes = require('./routes/cart');
+const orderRoutes = require('./routes/orders');
 
 // Import database connection
 const database = require('./config/database');
@@ -100,6 +101,7 @@ app.use('/api/addresses', addressRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

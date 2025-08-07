@@ -18,6 +18,7 @@ import Header from '@/components/Header';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { addressService, Address } from '@/services/addressesService';
+import { orderService, CreateOrderData } from '@/services/orderService';
 
 interface FormData {
   // Personal Info
@@ -217,24 +218,44 @@ export default function CheckoutScreen() {
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
     
-    // Simulate order processing
-    setTimeout(() => {
-      const newOrder = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        total: finalTotal,
-        status: 'pending' as const,
-        items: [...state.cart],
+    try {
+      const orderData: CreateOrderData = {
+        shippingAddress: {
+          name: `${formData.firstName} ${formData.lastName}`,
+          address: formData.address,
+          city: formData.city,
+          state: formData.state,
+          zipCode: formData.zipCode,
+          country: 'United States',
+          phone: formData.phone,
+        },
+        paymentInfo: {
+          method: 'credit_card',
+          lastFour: formData.cardNumber.slice(-4),
+          transactionId: `TXN-${Date.now()}`,
+        },
+        notes: 'Order placed through mobile app',
       };
 
-      dispatch({ type: 'ADD_ORDER', payload: newOrder });
-      dispatch({ type: 'CLEAR_CART' });
+      const response = await orderService.createOrder(orderData);
       
-      setIsProcessing(false);
+      if (response.success && response.data?.order) {
+        // Clear cart and add order to local state
+        dispatch({ type: 'ADD_ORDER', payload: {
+          id: response.data.order.id,
+          date: response.data.order.createdAt,
+          total: response.data.order.pricing.total,
+          status: (['pending', 'processing', 'shipped', 'delivered'] as const).includes(response.data.order.status as any)
+            ? response.data.order.status as 'pending' | 'processing' | 'shipped' | 'delivered'
+            : 'pending',
+          items: state.cart,
+        }});
+        
+      dispatch({ type: 'CLEAR_CART' });
       
       Alert.alert(
         'Order Placed Successfully!',
-        `Your order #${newOrder.id} has been placed and will be processed shortly.`,
+          `Your order #${response.data.order.orderNumber} has been placed and will be processed shortly.`,
         [
           {
             text: 'Continue Shopping',
@@ -245,7 +266,15 @@ export default function CheckoutScreen() {
           },
         ]
       );
-    }, 2000);
+      } else {
+        Alert.alert('Order Failed', response.message || 'Failed to place order. Please try again.');
+      }
+    } catch (error) {
+      console.error('Order placement error:', error);
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const renderPersonalInfo = () => (
