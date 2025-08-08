@@ -10,7 +10,11 @@ const { createSession, destroySession } = require('../middleware/session');
 const sendSessionResponse = async (req, user, statusCode, res, message = 'Success') => {
   try {
     // Create session instead of JWT token
-    await createSession(req, user);
+    req.session.userId = user._id.toString();
+    req.session.userEmail = user.email;
+    req.session.userName = user.name;
+    req.session.userRole = user.role;
+    req.session.loginTime = new Date();
     
   // Remove password from output
   user.password = undefined;

@@ -14,151 +14,41 @@ import { ArrowLeft, Package, Truck, CircleCheck as CheckCircle, Clock, MapPin, C
 import { useApp } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
-
-interface OrderItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image: string;
-  brand: string;
-}
-
-interface Order {
-  id: string;
-  date: string;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  total: number;
-  items: OrderItem[];
-  trackingNumber?: string;
-  shippingAddress: {
-    name: string;
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
-  paymentMethod: string;
-  subtotal: number;
-  tax: number;
-  shipping: number;
-  discount?: number;
-  promoCode?: string;
-}
-
-// Mock order data - in real app, this would come from API
-const mockOrderDetails: { [key: string]: Order } = {
-  'ORD-001': {
-    id: 'ORD-001',
-    date: '2024-01-15',
-    status: 'delivered',
-    total: 1299.99,
-    subtotal: 1298.00,
-    tax: 103.84,
-    shipping: 0,
-    discount: 101.85,
-    promoCode: 'WELCOME20',
-    items: [
-      {
-        id: '1',
-        name: 'iPhone 16 Pro Max',
-        price: 1199,
-        quantity: 1,
-        image: 'https://www.apple.com/newsroom/images/2024/09/apple-debuts-iphone-16-pro-and-iphone-16-pro-max/tile/Apple-iPhone-16-Pro-hero-240909-lp.jpg.news_app_ed.jpg',
-        brand: 'Apple',
-      },
-      {
-        id: '3',
-        name: 'Fitbit Inspire 3',
-        price: 99,
-        quantity: 1,
-        image: 'https://thegadgetflow.com/wp-content/uploads/2025/03/Fitbit-Inspire-3-health-and-fitness-smartwatch-04-1024x576.jpeg',
-        brand: 'Fitbit',
-      },
-    ],
-    trackingNumber: 'TRK123456789',
-    shippingAddress: {
-      name: 'John Doe',
-      street: '123 Main Street, Apt 4B',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      country: 'United States',
-    },
-    paymentMethod: 'Credit Card ending in 4242',
-  },
-  'ORD-002': {
-    id: 'ORD-002',
-    date: '2024-01-10',
-    status: 'shipped',
-    total: 849.99,
-    subtotal: 799.00,
-    tax: 63.92,
-    shipping: 9.99,
-    items: [
-      {
-        id: '2',
-        name: 'Samsung Galaxy S25',
-        price: 799,
-        quantity: 1,
-        image: 'https://diamu.com.bd/wp-content/uploads/2025/01/Samsung-Galaxy-S25.jpg',
-        brand: 'Samsung',
-      },
-    ],
-    trackingNumber: 'TRK987654321',
-    shippingAddress: {
-      name: 'John Doe',
-      street: '123 Main Street, Apt 4B',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      country: 'United States',
-    },
-    paymentMethod: 'PayPal',
-  },
-  'ORD-003': {
-    id: 'ORD-003',
-    date: '2024-01-05',
-    status: 'processing',
-    total: 2299.99,
-    subtotal: 2298.00,
-    tax: 183.84,
-    shipping: 0,
-    items: [
-      {
-        id: '5',
-        name: 'ASUS ROG Strix G16',
-        price: 1999,
-        quantity: 1,
-        image: 'https://computermania.com.bd/wp-content/uploads/2025/01/ASUS-ROG-5-2.jpg',
-        brand: 'ASUS',
-      },
-      {
-        id: '4',
-        name: 'Galaxy Watch7',
-        price: 299,
-        quantity: 1,
-        image: 'https://dazzle.sgp1.cdn.digitaloceanspaces.com/30756/Galaxy-Watch-7-green.png',
-        brand: 'Samsung',
-      },
-    ],
-    shippingAddress: {
-      name: 'John Doe',
-      street: '123 Main Street, Apt 4B',
-      city: 'New York',
-      state: 'NY',
-      zipCode: '10001',
-      country: 'United States',
-    },
-    paymentMethod: 'Credit Card ending in 1234',
-  },
-};
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { orderService, Order } from '@/services/orderService';
 
 export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams();
   const { dispatch } = useApp();
-  const [order] = useState<Order | null>(mockOrderDetails[id as string] || null);
+  const [order, setOrder] = useState<Order | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    loadOrder();
+  }, [id]);
+
+  const loadOrder = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await orderService.getOrder(id as string);
+      
+      if (response.success && response.data?.order) {
+        setOrder(response.data.order);
+      } else {
+        setError(response.message || 'Order not found');
+        setOrder(null);
+      }
+    } catch (error) {
+      console.error('Error loading order:', error);
+      setError('Network error. Please check your connection.');
+      setOrder(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -191,7 +81,7 @@ export default function OrderDetailsScreen() {
   };
 
   const handleCopyTracking = () => {
-    if (order?.trackingNumber) {
+    if (order?.tracking?.trackingNumber) {
       // In a real app, this would copy to clipboard
       Alert.alert('Copied', 'Tracking number copied to clipboard');
     }
@@ -203,17 +93,17 @@ export default function OrderDetailsScreen() {
     order.items.forEach(item => {
       // Add each item to cart
       const product = {
-        id: item.id,
+        id: item.productId,
         name: item.name,
         price: item.price,
-        image: item.image,
-        brand: item.brand,
+        image: item.image || 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400',
+        brand: 'Unknown',
         category: 'Electronics', // Mock category
         description: `${item.brand} ${item.name}`,
         rating: 4.5,
         reviews: 100,
         inStock: true,
-        images: [item.image],
+        images: [item.image || 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400'],
       };
 
       for (let i = 0; i < item.quantity; i++) {
@@ -234,7 +124,22 @@ export default function OrderDetailsScreen() {
     );
   };
 
-  if (!order) {
+  // Show loading state
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header
+          title="Order Details"
+          showBackButton
+          onBackPress={() => router.back()}
+        />
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error || !order) {
     return (
       <SafeAreaView style={styles.container}>
         <Header
@@ -243,8 +148,11 @@ export default function OrderDetailsScreen() {
           onBackPress={() => router.back()}
         />
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Order not found</Text>
-          <Button title="Go Back" onPress={() => router.back()} />
+          <Text style={styles.errorText}>{error || 'Order not found'}</Text>
+          <View style={styles.errorActions}>
+            <Button title="Try Again" onPress={loadOrder} variant="outline" />
+            <Button title="Go Back" onPress={() => router.back()} />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -262,9 +170,9 @@ export default function OrderDetailsScreen() {
         {/* Order Header */}
         <View style={styles.orderHeader}>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderId}>{order.id}</Text>
+            <Text style={styles.orderId}>{order.orderNumber}</Text>
             <Text style={styles.orderDate}>
-              Ordered on {new Date(order.date).toLocaleDateString('en-US', {
+              {new Date(order.createdAt).toLocaleDateString('en-US', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',
@@ -280,13 +188,13 @@ export default function OrderDetailsScreen() {
         </View>
 
         {/* Tracking Information */}
-        {order.trackingNumber && (
+        {order.tracking?.trackingNumber && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Tracking Information</Text>
             <View style={styles.trackingCard}>
               <View style={styles.trackingInfo}>
                 <Text style={styles.trackingLabel}>Tracking Number</Text>
-                <Text style={styles.trackingNumber}>{order.trackingNumber}</Text>
+                <Text style={styles.trackingNumber}>{order.tracking.trackingNumber}</Text>
               </View>
               <TouchableOpacity style={styles.copyButton} onPress={handleCopyTracking}>
                 <Copy size={16} color="#2563EB" />
@@ -302,7 +210,7 @@ export default function OrderDetailsScreen() {
             <MapPin size={20} color="#64748B" />
             <View style={styles.addressInfo}>
               <Text style={styles.addressName}>{order.shippingAddress.name}</Text>
-              <Text style={styles.addressText}>{order.shippingAddress.street}</Text>
+              <Text style={styles.addressText}>{order.shippingAddress.address}</Text>
               <Text style={styles.addressText}>
                 {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}
               </Text>
@@ -316,7 +224,10 @@ export default function OrderDetailsScreen() {
           <Text style={styles.sectionTitle}>Payment Method</Text>
           <View style={styles.paymentCard}>
             <CreditCard size={20} color="#64748B" />
-            <Text style={styles.paymentText}>{order.paymentMethod}</Text>
+            <Text style={styles.paymentText}>
+              {order.paymentInfo.method.replace('_', ' ').toUpperCase()}
+              {order.paymentInfo.lastFour && ` ending in ${order.paymentInfo.lastFour}`}
+            </Text>
           </View>
         </View>
 
@@ -324,17 +235,17 @@ export default function OrderDetailsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Items Ordered ({order.items.length})</Text>
           {order.items.map((item) => (
-            <View key={item.id} style={styles.orderItem}>
-              <Image source={{ uri: item.image }} style={styles.itemImage} />
+            <View key={item.productId} style={styles.orderItem}>
+              <Image source={{ uri: item.image || 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400' }} style={styles.itemImage} />
               <View style={styles.itemDetails}>
                 <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
-                <Text style={styles.itemBrand}>{item.brand}</Text>
+                <Text style={styles.itemBrand}>{'Unknown'}</Text>
                 <View style={styles.itemPricing}>
                   <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
                   <Text style={styles.itemPrice}>${item.price.toFixed(2)} each</Text>
                 </View>
                 <Text style={styles.itemTotal}>
-                  Total: ${(item.price * item.quantity).toFixed(2)}
+                  Total: ${item.totalPrice.toFixed(2)}
                 </Text>
               </View>
             </View>
@@ -347,35 +258,35 @@ export default function OrderDetailsScreen() {
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>${order.subtotal.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>${order.pricing.subtotal.toFixed(2)}</Text>
             </View>
             
-            {order.discount && (
+            {order.pricing.discount > 0 && (
               <View style={styles.summaryRow}>
                 <Text style={[styles.summaryLabel, styles.discountLabel]}>
                   Discount {order.promoCode && `(${order.promoCode})`}
                 </Text>
                 <Text style={[styles.summaryValue, styles.discountValue]}>
-                  -${order.discount.toFixed(2)}
+                  -${order.pricing.discount.toFixed(2)}
                 </Text>
               </View>
             )}
             
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Tax</Text>
-              <Text style={styles.summaryValue}>${order.tax.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>${order.pricing.tax.toFixed(2)}</Text>
             </View>
             
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Shipping</Text>
               <Text style={styles.summaryValue}>
-                {order.shipping === 0 ? 'Free' : `$${order.shipping.toFixed(2)}`}
+                {order.pricing.shipping === 0 ? 'Free' : `$${order.pricing.shipping.toFixed(2)}`}
               </Text>
             </View>
             
             <View style={[styles.summaryRow, styles.totalRow]}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${order.total.toFixed(2)}</Text>
+              <Text style={styles.totalValue}>${order.pricing.total.toFixed(2)}</Text>
             </View>
           </View>
         </View>
@@ -618,6 +529,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#1E293B',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  errorActions: {
+    flexDirection: 'row',
+    gap: 12,
     marginBottom: 20,
   },
 });

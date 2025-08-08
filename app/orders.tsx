@@ -6,7 +6,8 @@ import {
   TouchableOpacity, 
   StyleSheet,
   TextInput,
-  Image
+  Image,
+  RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -14,96 +15,58 @@ import { Search, Package, Truck, CircleCheck as CheckCircle, Circle as XCircle, 
 import { useApp } from '@/context/AppContext';
 import Header from '@/components/Header';
 import Button from '@/components/Button';
+import LoadingSpinner from '@/components/LoadingSpinner';
+import { orderService, Order } from '@/services/orderService';
 
-interface OrderItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image: string;
-}
-
-interface Order {
-  id: string;
-  date: string;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  total: number;
-  items: OrderItem[];
-  trackingNumber?: string;
-}
-
-const mockOrders: Order[] = [
-  {
-    id: 'ORD-001',
-    date: '2024-01-15',
-    status: 'delivered',
-    total: 1299.99,
-    items: [
-      {
-        id: '1',
-        name: 'iPhone 16 Pro Max',
-        price: 1199,
-        quantity: 1,
-        image: 'https://www.apple.com/newsroom/images/2024/09/apple-debuts-iphone-16-pro-and-iphone-16-pro-max/tile/Apple-iPhone-16-Pro-hero-240909-lp.jpg.news_app_ed.jpg',
-      },
-      {
-        id: '3',
-        name: 'Fitbit Inspire 3',
-        price: 99,
-        quantity: 1,
-        image: 'https://thegadgetflow.com/wp-content/uploads/2025/03/Fitbit-Inspire-3-health-and-fitness-smartwatch-04-1024x576.jpeg',
-      },
-    ],
-    trackingNumber: 'TRK123456789',
-  },
-  {
-    id: 'ORD-002',
-    date: '2024-01-10',
-    status: 'shipped',
-    total: 849.99,
-    items: [
-      {
-        id: '2',
-        name: 'Samsung Galaxy S25',
-        price: 799,
-        quantity: 1,
-        image: 'https://diamu.com.bd/wp-content/uploads/2025/01/Samsung-Galaxy-S25.jpg',
-      },
-    ],
-    trackingNumber: 'TRK987654321',
-  },
-  {
-    id: 'ORD-003',
-    date: '2024-01-05',
-    status: 'processing',
-    total: 2299.99,
-    items: [
-      {
-        id: '5',
-        name: 'ASUS ROG Strix G16',
-        price: 1999,
-        quantity: 1,
-        image: 'https://computermania.com.bd/wp-content/uploads/2025/01/ASUS-ROG-5-2.jpg',
-      },
-      {
-        id: '4',
-        name: 'Galaxy Watch7',
-        price: 299,
-        quantity: 1,
-        image: 'https://dazzle.sgp1.cdn.digitaloceanspaces.com/30756/Galaxy-Watch-7-green.png',
-      },
-    ],
-  },
-];
 
 export default function OrdersScreen() {
   const { state } = useApp();
-  const [orders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'recent' | 'past' | 'cancelled'>('all');
+  const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    loadUserOrders();
+  }, []);
+
+  const loadUserOrders = async () => {
+    if (!state.user) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const response = await orderService.getUserOrders(1, 50);
+      
+      if (response.success && response.data?.orders) {
+        setOrders(response.data.orders);
+      } else {
+        setError(response.message || 'Failed to load orders');
+        setOrders([]);
+      }
+    } catch (error) {
+      console.error('Error loading user orders:', error);
+      setError('Network error. Please check your connection.');
+      setOrders([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadUserOrders();
+    setIsRefreshing(false);
+  };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          order.items.some(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesFilter = filter === 'all' || 
@@ -151,16 +114,78 @@ export default function OrdersScreen() {
   const handleReorder = (order: Order) => {
     // Add all items from the order to cart
     order.items.forEach(item => {
-      const product = state.products.find(p => p.id === item.id);
+      const product = state.products.find(p => p.id === item.productId);
       if (product) {
         for (let i = 0; i < item.quantity; i++) {
-          // dispatch({ type: 'ADD_TO_CART', payload: product });
+          // Note: This would need to be implemented with the cart service
+          console.log('Reorder functionality needs cart service integration');
         }
       }
     });
     router.push('/(tabs)/cart');
   };
 
+  // Show login prompt if user is not authenticated
+  if (!state.user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header
+          title="My Orders"
+          showBackButton
+          onBackPress={() => router.back()}
+        />
+        <View style={styles.loginPromptContainer}>
+          <Package size={64} color="#CBD5E1" />
+          <Text style={styles.loginPromptTitle}>Login Required</Text>
+          <Text style={styles.loginPromptSubtitle}>
+            Please login to view your order history
+          </Text>
+          <Button
+            title="Login"
+            onPress={() => router.push('/auth/login')}
+            size="large"
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header
+          title="My Orders"
+          showBackButton
+          onBackPress={() => router.back()}
+        />
+        <LoadingSpinner />
+      </SafeAreaView>
+    );
+  }
+
+  // Show error state
+  if (error && orders.length === 0) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header
+          title="My Orders"
+          showBackButton
+          onBackPress={() => router.back()}
+        />
+        <View style={styles.errorContainer}>
+          <Package size={64} color="#EF4444" />
+          <Text style={styles.errorTitle}>Unable to Load Orders</Text>
+          <Text style={styles.errorSubtitle}>{error}</Text>
+          <Button
+            title="Try Again"
+            onPress={loadUserOrders}
+            size="large"
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
   const renderOrderItem = ({ item }: { item: Order }) => (
     <TouchableOpacity 
       style={styles.orderCard}
@@ -168,9 +193,9 @@ export default function OrdersScreen() {
     >
       <View style={styles.orderHeader}>
         <View style={styles.orderInfo}>
-          <Text style={styles.orderId}>Order {item.id}</Text>
+          <Text style={styles.orderId}>{item.orderNumber}</Text>
           <Text style={styles.orderDate}>
-            {new Date(item.date).toLocaleDateString('en-US', {
+            {new Date(item.createdAt).toLocaleDateString('en-US', {
               year: 'numeric',
               month: 'short',
               day: 'numeric',
@@ -187,8 +212,8 @@ export default function OrdersScreen() {
 
       <View style={styles.orderItems}>
         {item.items.slice(0, 2).map((orderItem, index) => (
-          <View key={orderItem.id} style={styles.orderItemRow}>
-            <Image source={{ uri: orderItem.image }} style={styles.itemImage} />
+          <View key={orderItem.productId} style={styles.orderItemRow}>
+            <Image source={{ uri: orderItem.image || 'https://images.pexels.com/photos/404280/pexels-photo-404280.jpeg?auto=compress&cs=tinysrgb&w=400' }} style={styles.itemImage} />
             <View style={styles.itemDetails}>
               <Text style={styles.itemName} numberOfLines={1}>{orderItem.name}</Text>
               <Text style={styles.itemPrice}>
@@ -207,7 +232,7 @@ export default function OrdersScreen() {
       <View style={styles.orderFooter}>
         <View style={styles.totalContainer}>
           <Text style={styles.totalLabel}>Total: </Text>
-          <Text style={styles.totalAmount}>${item.total.toFixed(2)}</Text>
+          <Text style={styles.totalAmount}>${item.pricing.total.toFixed(2)}</Text>
         </View>
         
         <View style={styles.orderActions}>
@@ -219,7 +244,7 @@ export default function OrdersScreen() {
               size="small"
             />
           )}
-          {(item.status === 'shipped' || item.status === 'processing') && item.trackingNumber && (
+          {(item.status === 'shipped' || item.status === 'processing') && item.tracking?.trackingNumber && (
             <Button
               title="Track"
               onPress={() => console.log('Track order')}
@@ -297,6 +322,30 @@ export default function OrdersScreen() {
           renderItem={renderOrderItem}
           contentContainerStyle={styles.ordersList}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={['#2563EB']}
+              tintColor="#2563EB"
+            />
+          }
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Package size={64} color="#CBD5E1" />
+              <Text style={styles.emptyTitle}>No orders found</Text>
+              <Text style={styles.emptySubtitle}>
+                {searchQuery ? 'Try adjusting your search' : 'You haven\'t placed any orders yet'}
+              </Text>
+              {!searchQuery && (
+                <Button
+                  title="Start Shopping"
+                  onPress={() => router.push('/(tabs)/search')}
+                  size="large"
+                />
+              )}
+            </View>
+          )}
         />
       )}
     </SafeAreaView>
@@ -481,6 +530,46 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emptySubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  loginPromptContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  loginPromptTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  loginPromptSubtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  errorContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  errorSubtitle: {
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#64748B',

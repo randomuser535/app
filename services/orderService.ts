@@ -9,6 +9,7 @@ const API_BASE_URL = Platform.OS === 'web'
   : 'http://192.168.0.174:5020/api';
 
 export interface OrderItem {
+  brand: any;
   image: string;
   id: Key | null | undefined;
   productId: string;
@@ -294,6 +295,27 @@ class OrderService {
     }
   }
 
+  /**
+   * Get current user's orders (using session authentication)
+   */
+  async getUserOrders(page: number = 1, limit: number = 50): Promise<OrderResponse> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders?page=${page}&limit=${limit}`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+        credentials: 'include',
+      });
+
+      const data: OrderResponse = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Get user orders error:', error);
+      return {
+        success: false,
+        message: 'Network error. Please check your connection and try again.',
+      };
+    }
+  }
   /**
    * Get order statistics
    */

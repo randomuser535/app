@@ -11,7 +11,6 @@ const {
   getRecentOrders,
   bulkUpdateStatus
 } = require('../controllers/orderController');
-const { requireAuth } = require('../middleware/session');
 
 const router = express.Router();
 

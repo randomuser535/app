@@ -45,6 +45,14 @@ const requireAuth = (req, res, next) => {
   req.userEmail = req.session.userEmail;
   req.userName = req.session.userName;
   
+  // Also add user object for role checking
+  req.user = {
+    id: req.session.userId,
+    email: req.session.userEmail,
+    name: req.session.userName,
+    role: req.session.userRole || 'user'
+  };
+  
   next();
 };
 

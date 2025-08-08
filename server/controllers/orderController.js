@@ -11,8 +11,8 @@ const generateOrderNumber = () => {
 
 /**
  * @desc    Get all orders with filtering and pagination
- * @route   GET /api/orders
- * @access  Private (Admin only)
+ * @route   GET /api/orders  
+ * @access  Private (Returns user's own orders, or all orders if admin)
  */
 const getOrders = async (req, res) => {
   try {
@@ -30,16 +30,20 @@ const getOrders = async (req, res) => {
 
     // Build query
     let query = {};
+    
+    // For regular users, only show their own orders
+    // For admins, show all orders (or filtered by customerId if provided)
+    if (req.user?.role !== 'admin') {
+      query.customerId = req.userId;
+    } else if (customerId) {
+      query.customerId = customerId;
+    }
 
     // Status filter
     if (status && status !== 'all') {
       query.status = status;
     }
 
-    // Customer filter
-    if (customerId) {
-      query.customerId = customerId;
-    }
 
     // Date range filter
     if (startDate || endDate) {
@@ -103,11 +107,18 @@ const getOrders = async (req, res) => {
 /**
  * @desc    Get single order
  * @route   GET /api/orders/:id
- * @access  Private (Admin or Order Owner)
+ * @access  Private (User can only access their own orders, admin can access any)
  */
 const getOrder = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
+    let query = { _id: req.params.id };
+    
+    // For regular users, ensure they can only access their own orders
+    if (req.user?.role !== 'admin') {
+      query.customerId = req.userId;
+    }
+    
+    const order = await Order.findOne(query)
       .populate('customerId', 'name email phone')
       .populate('items.productId', 'name image brand category')
       .populate('statusHistory.updatedBy', 'name');
@@ -115,7 +126,7 @@ const getOrder = async (req, res) => {
     if (!order) {
       return res.status(404).json({
         success: false,
-        message: 'Order not found'
+        message: 'Order not found or access denied'
       });
     }
 
