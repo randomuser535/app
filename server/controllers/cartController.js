@@ -80,6 +80,7 @@ const addToCart = async (req, res) => {
 
     // Verify product exists and is active
     const product = await Product.findOne({ _id: productId, isActive: true });
+    
     if (!product) {
       return res.status(404).json({
         success: false,

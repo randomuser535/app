@@ -170,10 +170,13 @@ const createOrder = async (req, res) => {
     // Get user's cart
     const cartItems = await Cart.getUserCart(req.userId);
     
-    if (!cartItems || cartItems.length === 0) {
+    // Filter out items where product no longer exists (same as cart controller)
+    const validCartItems = cartItems.filter(item => item.productId);
+    
+    if (!validCartItems || validCartItems.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Cart is empty'
+        message: 'Your cart is empty. Please add some items before checkout.'
       });
     }
 
@@ -181,7 +184,7 @@ const createOrder = async (req, res) => {
     const orderItems = [];
     let subtotal = 0;
 
-    for (const cartItem of cartItems) {
+    for (const cartItem of validCartItems) {
       const product = cartItem.productId;
       
       if (!product || !product.isActive) {

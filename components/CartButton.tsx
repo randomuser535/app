@@ -42,11 +42,13 @@ export default function CartButton({
           `${showQuantity ? quantity : 1} ${product.name}${(showQuantity ? quantity : 1) > 1 ? 's' : ''} added to cart!`
         );
       } else {
-        Alert.alert('Error', response.message);
+        console.error('Cart error details:', response);
+        const errorMessage = response.message || 'Failed to add item to cart. Please try again.';
+        Alert.alert('Error', errorMessage);
       }
     } catch (error) {
       console.error('Add to cart error:', error);
-      Alert.alert('Error', 'Network error. Please try again.');
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }

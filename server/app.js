@@ -38,31 +38,31 @@ app.use(helmet({
 }));
 
 // Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many requests from this IP, please try again later'
-  },
-  standardHeaders: true,
-  legacyHeaders: false
-});
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 100, // Limit each IP to 100 requests per windowMs
+//   message: {
+//     success: false,
+//     message: 'Too many requests from this IP, please try again later'
+//   },
+//   standardHeaders: true,
+//   legacyHeaders: false
+// });
 
 // Apply rate limiting to auth routes
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 auth requests per windowMs
-  message: {
-    success: false,
-    message: 'Too many authentication attempts, please try again later'
-  },
-  skipSuccessfulRequests: true
-});
+// const authLimiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 5, // Limit each IP to 5 auth requests per windowMs
+//   message: {
+//     success: false,
+//     message: 'Too many authentication attempts, please try again later'
+//   },
+//   skipSuccessfulRequests: true
+// });
 
-app.use('/api', limiter);
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/signup', authLimiter);
+// app.use('/api', limiter);
+// app.use('/api/auth/login', authLimiter);
+// app.use('/api/auth/signup', authLimiter);
 
 // CORS configuration
 app.use(cors({

@@ -19,6 +19,7 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { addressService, Address } from '@/services/addressesService';
 import { orderService, CreateOrderData } from '@/services/orderService';
+import { cartService } from '@/services/cartService';
 
 interface FormData {
   // Personal Info
@@ -48,6 +49,8 @@ export default function CheckoutScreen() {
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isValidatingCart, setIsValidatingCart] = useState(true);
+  const [cartValidationError, setCartValidationError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
     firstName: state.user?.name?.split(' ')[0] || '',
     lastName: state.user?.name?.split(' ')[1] || '',
@@ -76,10 +79,49 @@ export default function CheckoutScreen() {
   const finalTotal = cartTotal + tax + shipping;
 
   useEffect(() => {
+    validateCart();
+  }, []);
+
+  useEffect(() => {
     if (currentStep === 1) {
       loadAddresses();
     }
   }, [currentStep]);
+
+  const validateCart = async () => {
+    try {
+      setIsValidatingCart(true);
+      setCartValidationError(null);
+      
+      // Get fresh cart data from server
+      const response = await cartService.getCart();
+      
+      if (!response.success) {
+        setCartValidationError('Failed to load cart. Please try again.');
+        return;
+      }
+      
+      const cartItems = response.data?.cart || [];
+      
+      if (cartItems.length === 0) {
+        setCartValidationError('Your cart is empty. Please add some items before checkout.');
+        return;
+      }
+      
+      // Check if all items are still available
+      const unavailableItems = cartItems.filter(item => !item.product?.inStock);
+      if (unavailableItems.length > 0) {
+        setCartValidationError(`Some items in your cart are no longer available: ${unavailableItems.map(item => item.product?.name).join(', ')}`);
+        return;
+      }
+      
+    } catch (error) {
+      console.error('Cart validation error:', error);
+      setCartValidationError('Failed to validate cart. Please try again.');
+    } finally {
+      setIsValidatingCart(false);
+    }
+  };
 
   const loadAddresses = async () => {
     try {
@@ -219,6 +261,18 @@ export default function CheckoutScreen() {
     setIsProcessing(true);
     
     try {
+      // Validate cart one more time before placing order
+      const cartResponse = await cartService.getCart();
+      
+      if (!cartResponse.success || !cartResponse.data?.cart || cartResponse.data.cart.length === 0) {
+        Alert.alert(
+          'Cart Empty', 
+          'Your cart is empty. Please add some items before checkout.',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+        return;
+      }
+
       const orderData: CreateOrderData = {
         shippingAddress: {
           name: `${formData.firstName} ${formData.lastName}`,
@@ -543,8 +597,32 @@ export default function CheckoutScreen() {
         onBackPress={handleBack}
       />
 
-      {/* Progress Indicator */}
-      <View style={styles.progressContainer}>
+      {/* Cart Validation Loading */}
+      {isValidatingCart && (
+        <View style={styles.loadingContainer}>
+          <LoadingSpinner />
+          <Text style={styles.loadingText}>Validating your cart...</Text>
+        </View>
+      )}
+
+      {/* Cart Validation Error */}
+      {cartValidationError && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Cart Error</Text>
+          <Text style={styles.errorMessage}>{cartValidationError}</Text>
+          <Button
+            title="Go Back"
+            onPress={() => router.back()}
+            size="large"
+          />
+        </View>
+      )}
+
+      {/* Normal Checkout Flow */}
+      {!isValidatingCart && !cartValidationError && (
+        <>
+          {/* Progress Indicator */}
+          <View style={styles.progressContainer}>
         {steps.map((step, index) => (
           <View key={index} style={styles.stepIndicator}>
             <View style={[
@@ -595,6 +673,8 @@ export default function CheckoutScreen() {
           />
         </View>
       </KeyboardAvoidingView>
+      </>
+      )}
     </SafeAreaView>
   );
 }
@@ -753,6 +833,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#64748B',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-Bold',
+    color: '#EF4444',
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 20,
   },
   savedAddressesContainer: {
     marginBottom: 20,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,6 +10,7 @@ import {
   RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native'; // Add this import
 import { router } from 'expo-router';
 import { Heart, Share2, Grid3x3 as Grid3X3, List, Import as SortAsc, ShoppingCart, Trash2 } from 'lucide-react-native';
 import { useApp } from '@/context/AppContext';
@@ -18,6 +19,7 @@ import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { wishlistService, WishlistItem } from '@/services/wishlistService';
 import { cartService } from '@/services/cartService';
+import { authService } from '@/services/authService';
 
 export default function WishlistTabScreen() {
   const { state } = useApp();
@@ -26,20 +28,45 @@ export default function WishlistTabScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'rating' | 'dateAdded'>('dateAdded');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
-  useEffect(() => {
-    loadWishlist();
-  }, []);
+  // Replace useEffect with useFocusEffect
+  useFocusEffect(
+    useCallback(() => {
+      loadWishlist();
+    }, [])
+  );
 
   const loadWishlist = async () => {
     try {
       setIsLoading(true);
+      
+      // Check if user is authenticated first
+      const isAuth = await authService.isAuthenticated();
+      setIsAuthenticated(isAuth);
+      
+      if (!isAuth) {
+        setWishlistItems([]);
+        setIsLoading(false);
+        return;
+      }
+      
       const response = await wishlistService.getWishlist();
       
       if (response.success && response.data?.wishlist) {
         setWishlistItems(response.data.wishlist);
       } else {
-        Alert.alert('Error', response.message);
+        console.error('Wishlist load error:', response.message);
+        if (response.message?.includes('Authentication required')) {
+          setIsAuthenticated(false);
+          Alert.alert(
+            'Session Expired',
+            'Please log in to view your wishlist',
+            [{ text: 'OK', onPress: () => router.push('/(tabs)/auth/login') }]
+          );
+        } else {
+          Alert.alert('Error', response.message);
+        }
       }
     } catch (error) {
       console.error('Error loading wishlist:', error);
@@ -222,15 +249,31 @@ export default function WishlistTabScreen() {
       {wishlistItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Heart size={64} color="#CBD5E1" />
-          <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
-          <Text style={styles.emptySubtitle}>
-            Save items you love to your wishlist and shop them later
-          </Text>
-          <Button
-            title="Start Shopping"
-            onPress={() => router.push('/(tabs)/search')}
-            size="large"
-          />
+          {!isAuthenticated ? (
+            <>
+              <Text style={styles.emptyTitle}>Please log in to view your wishlist</Text>
+              <Text style={styles.emptySubtitle}>
+                Sign in to access your saved items and wishlists
+              </Text>
+              <Button
+                title="Log In"
+                onPress={() => router.push('/(tabs)/auth/login')}
+                size="large"
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
+              <Text style={styles.emptySubtitle}>
+                Save items you love to your wishlist and shop them later
+              </Text>
+              <Button
+                title="Start Shopping"
+                onPress={() => router.push('/(tabs)/search')}
+                size="large"
+              />
+            </>
+          )}
         </View>
       ) : (
         <>

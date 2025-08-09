@@ -62,8 +62,9 @@ export default function WishlistButton({
           onToggle?.(true);
           Alert.alert('Added', 'Product added to wishlist!');
         } else {
-          if (response.message.includes('already in wishlist')) {
+          if (response.message.includes('already in wishlist') || response.message.includes('already in your wishlist')) {
             setIsInWishlist(true);
+            onToggle?.(true);
             Alert.alert('Already Added', 'Product is already in your wishlist');
           } else {
             Alert.alert('Error', response.message);
@@ -75,6 +76,7 @@ export default function WishlistButton({
       Alert.alert('Error', 'Network error. Please try again.');
     } finally {
       setIsLoading(false);
+      await checkWishlistStatus();
     }
   };
 
@@ -86,13 +88,12 @@ export default function WishlistButton({
     >
       <Heart
         size={size}
-        color={isInWishlist ? '#FFFFFF' : '#64748B'}
-        fill={isInWishlist ? '#FFFFFF' : 'none'}
+        color={isInWishlist ? '#EF4444' : '#64748B'}
+        fill={isInWishlist ? '#EF4444' : 'none'}
       />
     </TouchableOpacity>
   );
 }
-
 const styles = StyleSheet.create({
   button: {
     width: 40,
@@ -108,6 +109,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   activeButton: {
-    backgroundColor: '#EF4444',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
 });

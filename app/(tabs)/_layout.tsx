@@ -1,7 +1,5 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import CartBadge from '@/components/CartBadge';
-import WishlistBadge from '@/components/WishlistBadge';
 import { View } from 'react-native';
 
 export default function TabLayout() {
@@ -62,7 +60,6 @@ export default function TabLayout() {
                 size={size} 
                 color={color} 
               />
-              <WishlistBadge />
             </View>
           ),
         }}
@@ -78,7 +75,6 @@ export default function TabLayout() {
                 size={size} 
                 color={color} 
               />
-              <CartBadge />
             </View>
           ),
         }}

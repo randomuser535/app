@@ -1,9 +1,8 @@
 // API Configuration
 export const API_CONFIG = {
   // Development
-  DEV_BASE_URL: 'http://localhost:5000/api',
+  DEV_BASE_URL: 'http://192.168.0.174:5020/api',
   
-  // Production - Replace with your actual production API URL
   PROD_BASE_URL: 'https://your-api-domain.com/api',
   
   // Timeout settings

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -10,12 +10,14 @@ import {
   RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native'; // Add this import
 import { Minus, Plus, Trash2, ShoppingBag } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import Button from '@/components/Button';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import { cartService, CartItem, CartSummary } from '@/services/cartService';
+import { authService } from '@/services/authService';
 
 export default function CartScreen() {
   const { state } = useApp();
@@ -24,21 +26,48 @@ export default function CartScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
-  useEffect(() => {
-    loadCart();
-  }, []);
+  // Replace useEffect with useFocusEffect
+  useFocusEffect(
+    useCallback(() => {
+      loadCart();
+    }, [])
+  );
 
   const loadCart = async () => {
     try {
       setIsLoading(true);
+      
+      // Check if user is authenticated first
+      const isAuth = await authService.isAuthenticated();
+      setIsAuthenticated(isAuth);
+      
+      if (!isAuth) {
+        setCartItems([]);
+        setCartSummary(null);
+        setIsLoading(false);
+        return;
+      }
+      
       const response = await cartService.getCart();
       
       if (response.success && response.data) {
         setCartItems(response.data.cart || []);
         setCartSummary(response.data.summary || null);
       } else {
-        Alert.alert('Error', response.message);
+        console.error('Cart load error:', response.message);
+        if (response.message?.includes('Authentication required')) {
+          // Session expired, redirect to login
+          setIsAuthenticated(false);
+          Alert.alert(
+            'Session Expired',
+            'Please log in to view your cart',
+            [{ text: 'OK', onPress: () => router.push('/(tabs)/auth/login') }]
+          );
+        } else {
+          Alert.alert('Error', response.message);
+        }
       }
     } catch (error) {
       console.error('Error loading cart:', error);
@@ -48,6 +77,7 @@ export default function CartScreen() {
     }
   };
 
+  // Rest of your component code remains the same...
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await loadCart();
@@ -185,15 +215,31 @@ export default function CartScreen() {
         </View>
         <View style={styles.emptyContainer}>
           <ShoppingBag size={64} color="#CBD5E1" />
-          <Text style={styles.emptyTitle}>Your cart is empty</Text>
-          <Text style={styles.emptySubtitle}>
-            Add some products to get started
-          </Text>
-          <Button
-            title="Start Shopping"
-            onPress={() => router.push('/(tabs)/search')}
-            size='large'
-          />
+          {!isAuthenticated ? (
+            <>
+              <Text style={styles.emptyTitle}>Please log in to view your cart</Text>
+              <Text style={styles.emptySubtitle}>
+                Sign in to access your saved items and continue shopping
+              </Text>
+              <Button
+                title="Log In"
+                onPress={() => router.push('/(tabs)/auth/login')}
+                size='large'
+              />
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyTitle}>Your cart is empty</Text>
+              <Text style={styles.emptySubtitle}>
+                Add some products to get started
+              </Text>
+              <Button
+                title="Start Shopping"
+                onPress={() => router.push('/(tabs)/search')}
+                size='large'
+              />
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -262,6 +308,7 @@ export default function CartScreen() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
