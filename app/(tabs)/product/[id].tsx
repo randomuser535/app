@@ -245,6 +245,7 @@ export default function ProductDetailScreen() {
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
         <View style={styles.quantityContainer}>
+          <Text style={styles.quantityLabel}>Qty:</Text>
           <View style={styles.quantityControls}>
             <TouchableOpacity
               style={styles.quantityButton}
@@ -264,8 +265,9 @@ export default function ProductDetailScreen() {
         
         <CartButton
           product={product}
-          showQuantity={true}
+          quantity={quantity} // Pass the current quantity
           onAddToCart={handleCartSuccess}
+          showQuantity={false} // Don't show internal quantity controls
           style={styles.cartButton}
         />
       </View>
@@ -492,6 +494,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
     gap: 16,
+    minHeight: 80,
+    paddingBottom: Platform.OS === 'ios' ? 16 : 16,
   },
   quantityContainer: {
     flexDirection: 'row',
@@ -529,7 +533,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cartButton: {
-    flex: 1,
+    minWidth: 150,
   },
   errorContainer: {
     flex: 1,

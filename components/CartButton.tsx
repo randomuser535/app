@@ -11,36 +11,45 @@ interface CartButtonProps {
   showQuantity?: boolean;
   onAddToCart?: () => void;
   disabled?: boolean;
+  quantity?: number; // Add this prop
+  onQuantityChange?: (quantity: number) => void; // Add this prop
 }
 
-export default function CartButton({ 
-  product, 
-  size = 20, 
+export default function CartButton({
+  product,
+  size = 20,
   style,
   showQuantity = false,
   onAddToCart,
-  disabled = false
+  disabled = false,
+  quantity: externalQuantity, // Use external quantity
+  onQuantityChange
 }: CartButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [quantity, setQuantity] = useState(1);
+  const [internalQuantity, setInternalQuantity] = useState(1);
+  
+  // Use external quantity if provided, otherwise use internal
+  const currentQuantity = externalQuantity !== undefined ? externalQuantity : internalQuantity;
 
   const handleAddToCart = async () => {
     if (isLoading || disabled || !product.inStock) return;
-
+    
     setIsLoading(true);
-
     try {
       const response = await cartService.addToCart({
         productId: product.id,
-        quantity: showQuantity ? quantity : 1,
+        quantity: currentQuantity, // Use currentQuantity instead of hardcoded values
       });
-
+      
       if (response.success) {
         onAddToCart?.();
-        Alert.alert(
-          'Added to Cart',
-          `${showQuantity ? quantity : 1} ${product.name}${(showQuantity ? quantity : 1) > 1 ? 's' : ''} added to cart!`
-        );
+        // Don't show alert here if onAddToCart is provided - let parent handle it
+        if (!onAddToCart) {
+          Alert.alert(
+            'Added to Cart',
+            `${currentQuantity} ${product.name}${currentQuantity > 1 ? 's' : ''} added to cart!`
+          );
+        }
       } else {
         console.error('Cart error details:', response);
         const errorMessage = response.message || 'Failed to add item to cart. Please try again.';
@@ -55,7 +64,15 @@ export default function CartButton({
   };
 
   const updateQuantity = (newQuantity: number) => {
-    setQuantity(Math.max(1, Math.min(99, newQuantity)));
+    const validQuantity = Math.max(1, Math.min(99, newQuantity));
+    
+    if (onQuantityChange) {
+      // If external quantity control, notify parent
+      onQuantityChange(validQuantity);
+    } else {
+      // If internal quantity control, update internal state
+      setInternalQuantity(validQuantity);
+    }
   };
 
   if (showQuantity) {
@@ -64,23 +81,23 @@ export default function CartButton({
         <View style={styles.quantityControls}>
           <TouchableOpacity
             style={styles.quantityButton}
-            onPress={() => updateQuantity(quantity - 1)}
-            disabled={quantity <= 1}
+            onPress={() => updateQuantity(currentQuantity - 1)}
+            disabled={currentQuantity <= 1}
           >
-            <Minus size={16} color={quantity <= 1 ? '#CBD5E1' : '#64748B'} />
+            <Minus size={16} color={currentQuantity <= 1 ? '#CBD5E1' : '#64748B'} />
           </TouchableOpacity>
-          
-          <Text style={styles.quantityText}>{quantity}</Text>
-          
+         
+          <Text style={styles.quantityText}>{currentQuantity}</Text>
+         
           <TouchableOpacity
             style={styles.quantityButton}
-            onPress={() => updateQuantity(quantity + 1)}
-            disabled={quantity >= 99}
+            onPress={() => updateQuantity(currentQuantity + 1)}
+            disabled={currentQuantity >= 99}
           >
-            <Plus size={16} color={quantity >= 99 ? '#CBD5E1' : '#64748B'} />
+            <Plus size={16} color={currentQuantity >= 99 ? '#CBD5E1' : '#64748B'} />
           </TouchableOpacity>
         </View>
-        
+       
         <TouchableOpacity
           style={[styles.addButton, (disabled || !product.inStock) && styles.disabledButton]}
           onPress={handleAddToCart}
@@ -88,7 +105,7 @@ export default function CartButton({
         >
           <ShoppingCart size={size} color="#FFFFFF" />
           <Text style={styles.addButtonText}>
-            ${(product.price * quantity).toFixed(2)}
+            ${(product.price * currentQuantity).toFixed(2)}
           </Text>
         </TouchableOpacity>
       </View>
@@ -98,7 +115,7 @@ export default function CartButton({
   return (
     <TouchableOpacity
       style={[
-        styles.button, 
+        styles.button,
         (disabled || !product.inStock) && styles.disabledButton,
         style
       ]}
@@ -106,6 +123,10 @@ export default function CartButton({
       disabled={disabled || !product.inStock || isLoading}
     >
       <ShoppingCart size={size} color="#FFFFFF" />
+      {/* Show quantity in button text when not showing quantity controls */}
+      {currentQuantity > 1 && (
+        <Text style={styles.buttonText}>Add {currentQuantity}</Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -113,12 +134,18 @@ export default function CartButton({
 const styles = StyleSheet.create({
   button: {
     backgroundColor: '#2563EB',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 8,
-    padding: 8,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 40,
-    minHeight: 40,
+    gap: 8,
+  },
+  buttonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
   disabledButton: {
     backgroundColor: '#CBD5E1',
@@ -133,17 +160,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#F1F5F9',
     borderRadius: 8,
-    paddingHorizontal: 4,
   },
   quantityButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   quantityText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontWeight: '600',
     color: '#1E293B',
     marginHorizontal: 12,
     minWidth: 20,
@@ -151,16 +177,18 @@ const styles = StyleSheet.create({
   },
   addButton: {
     backgroundColor: '#2563EB',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flex: 1,
     gap: 8,
   },
   addButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
